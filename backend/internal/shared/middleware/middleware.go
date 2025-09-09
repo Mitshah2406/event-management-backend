@@ -1,11 +1,13 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
 	"evently/internal/shared/config"
 	"evently/internal/shared/utils/response"
+	"evently/internal/users"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
@@ -81,14 +83,14 @@ func RequireRole(requiredRole string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
+		fmt.Print("userRole:", userRole)
 		c.Next()
 	}
 }
 
 // RequireAdmin middleware that requires admin role
 func RequireAdmin() gin.HandlerFunc {
-	return RequireRole("admin")
+	return RequireRole(string(users.RoleAdmin))
 }
 
 // RequireRoles middleware checks if user has any of the required roles

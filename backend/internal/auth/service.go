@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"errors"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -63,7 +65,7 @@ func (s *service) Register(ctx context.Context, req *RegisterRequest) (*AuthResp
 	if role == "" {
 		role = string(users.RoleUser)
 	}
-
+	role = strings.ToUpper(role)
 	// Validate role
 	if !users.IsValidRole(role) {
 		role = string(users.RoleUser)
@@ -83,14 +85,14 @@ func (s *service) Register(ctx context.Context, req *RegisterRequest) (*AuthResp
 	}
 
 	// Generate tokens
-	tokenPair, err := s.generateTokenPair(user.ID, user.Email, string(user.Role))
+	tokenPair, err := s.generateTokenPair(user.ID.String(), user.Email, string(user.Role))
 	if err != nil {
 		return nil, err
 	}
 
 	return &AuthResponse{
 		User: UserResponse{
-			ID:        user.ID,
+			ID:        user.ID.String(),
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
 			Email:     user.Email,
@@ -120,14 +122,14 @@ func (s *service) Login(ctx context.Context, req *LoginRequest) (*AuthResponse, 
 	}
 
 	// Generate tokens
-	tokenPair, err := s.generateTokenPair(user.ID, user.Email, string(user.Role))
+	tokenPair, err := s.generateTokenPair(user.ID.String(), user.Email, string(user.Role))
 	if err != nil {
 		return nil, err
 	}
 
 	return &AuthResponse{
 		User: UserResponse{
-			ID:        user.ID,
+			ID:        user.ID.String(),
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
 			Email:     user.Email,
@@ -159,7 +161,7 @@ func (s *service) RefreshToken(ctx context.Context, refreshToken string) (*Token
 	}
 
 	// Generate new token pair
-	tokenPair, err := s.generateTokenPair(user.ID, user.Email, string(user.Role))
+	tokenPair, err := s.generateTokenPair(user.ID.String(), user.Email, string(user.Role))
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +208,7 @@ func (s *service) generateTokenPair(userID, email, role string) (*TokenPair, err
 		Type:   "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(1 * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.config.JWT.JWTExpiresIn)),
 			Issuer:    "evently",
 			Subject:   userID,
 		},
@@ -237,7 +239,8 @@ func (s *service) generateTokenPair(userID, email, role string) (*TokenPair, err
 	if err != nil {
 		return nil, err
 	}
-
+	log.Default().Println("Generated Tokens:", accessTokenString, refreshTokenString)
+	log.Default().Println("JWT Config:", s.config.JWT)
 	return &TokenPair{
 		AccessToken:  accessTokenString,
 		RefreshToken: refreshTokenString,

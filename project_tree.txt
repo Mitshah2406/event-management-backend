@@ -30,7 +30,11 @@
 │   │   │   ├── models.go
 │   │   │   └── status.go
 │   │   ├── events
+│   │   │   ├── controller.go
 │   │   │   ├── models.go
+│   │   │   ├── repository.go
+│   │   │   ├── router.go
+│   │   │   ├── service.go
 │   │   │   └── status.go
 │   │   ├── shared
 │   │   │   ├── config
@@ -41,7 +45,15 @@
 │   │   │   ├── middleware
 │   │   │   │   └── middleware.go
 │   │   │   └── utils
-│   │   │       └── response.model.go
+│   │   │       └── response
+│   │   │           ├── helper.go
+│   │   │           └── response.model.go
+│   │   ├── tags
+│   │   │   ├── controller.go
+│   │   │   ├── models.go
+│   │   │   ├── repository.go
+│   │   │   ├── router.go
+│   │   │   └── service.go
 │   │   └── users
 │   │       ├── models.go
 │   │       └── roles.go
@@ -57,7 +69,6 @@
 │       ├── build-errors.log
 │       └── main
 ├── Evently - Challenge.pdf
-├── project_tree.txt
-└── tree
+└── project_tree.txt
 
-29 directories, 32 files
+31 directories, 41 files

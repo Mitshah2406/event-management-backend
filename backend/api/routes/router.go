@@ -3,8 +3,10 @@ package routes
 
 import (
 	"evently/internal/auth"
+	"evently/internal/events"
 	"evently/internal/shared/config"
 	"evently/internal/shared/database"
+	"evently/internal/tags"
 	"net/http"
 	"time"
 
@@ -13,8 +15,9 @@ import (
 
 // Router holds all route dependencies
 type Router struct {
-	config *config.Config
-	db     *database.DB
+	config     *config.Config
+	db         *database.DB
+	tagService tags.Service // For dependency injection
 }
 
 // NewRouter creates a new router instance
@@ -36,8 +39,13 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		// Setup auth routes
 		r.setupAuthRoutes(api)
 		
+		// Setup tag routes (must be before event routes for dependency injection)
+		r.setupTagRoutes(api)
+		
+		// Setup event routes
+		r.setupEventRoutes(api)
+		
 		// TODO: Add other route groups here
-		// r.setupEventRoutes(api)
 		// r.setupBookingRoutes(api)
 		// r.setupAnalyticsRoutes(api)
 	}
@@ -92,16 +100,36 @@ func (r *Router) setupAuthRoutes(rg *gin.RouterGroup) {
 	authRouter.SetupRoutes(rg)
 }
 
+// setupTagRoutes configures tag management routes
+func (r *Router) setupTagRoutes(rg *gin.RouterGroup) {
+	// Initialize tag dependencies
+	tagRepo := tags.NewRepository(r.db.GetPostgreSQL())
+	tagService := tags.NewService(tagRepo)
+	tagController := tags.NewController(tagService)
+
+	// Store tag service for dependency injection
+	r.tagService = tagService
+
+	// Setup tag routes
+	tags.SetupTagRoutes(rg, tagController)
+}
+
 // setupEventRoutes configures event management routes
-// func (r *Router) setupEventRoutes(rg *gin.RouterGroup) {
-// 	// TODO: Implement event routes
-// 	events := rg.Group("/events")
-// 	{
-// 		events.GET("/", func(c *gin.Context) {
-// 			c.JSON(http.StatusOK, gin.H{"message": "events endpoint"})
-// 		})
-// 	}
-// }
+func (r *Router) setupEventRoutes(rg *gin.RouterGroup) {
+	// Initialize event dependencies
+	eventRepo := events.NewRepository(r.db.GetPostgreSQL())
+	eventService := events.NewService(eventRepo)
+	
+	// Inject tag service dependency
+	if r.tagService != nil {
+		eventService.SetTagService(r.tagService)
+	}
+	
+	eventController := events.NewController(eventService)
+
+	// Setup event routes
+	events.SetupEventRoutes(rg, eventController)
+}
 
 // setupBookingRoutes configures booking management routes
 // func (r *Router) setupBookingRoutes(rg *gin.RouterGroup) {

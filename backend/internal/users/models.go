@@ -1,9 +1,13 @@
 package users
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type User struct {
-	ID        string    `json:"id" gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	ID        uuid.UUID `json:"id" gorm:"primaryKey;type:uuid;default:uuid_generate_v4()"`
 	FirstName string    `json:"first_name" gorm:"not null"`
 	LastName  string    `json:"last_name" gorm:"not null"`
 	Password  string    `json:"-" gorm:"not null"` // hide in json
