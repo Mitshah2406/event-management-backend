@@ -1,0 +1,63 @@
+.
+├── backend
+│   ├── api
+│   │   ├── docs
+│   │   ├── middleware
+│   │   └── routes
+│   │       └── router.go
+│   ├── cmd
+│   ├── configs
+│   ├── deployments
+│   │   ├── docker
+│   │   │   ├── docker-compose.dev.yml
+│   │   │   ├── docker-compose.yml
+│   │   │   ├── Dockerfile
+│   │   │   ├── Dockerfile.dev
+│   │   │   └── init.sql
+│   │   └── k8s
+│   ├── docs
+│   ├── go.mod
+│   ├── go.sum
+│   ├── internal
+│   │   ├── analytics
+│   │   ├── auth
+│   │   │   ├── controller.go
+│   │   │   ├── models.go
+│   │   │   ├── repository.go
+│   │   │   ├── router.go
+│   │   │   └── service.go
+│   │   ├── bookings
+│   │   │   ├── models.go
+│   │   │   └── status.go
+│   │   ├── events
+│   │   │   ├── models.go
+│   │   │   └── status.go
+│   │   ├── shared
+│   │   │   ├── config
+│   │   │   │   └── config.go
+│   │   │   ├── database
+│   │   │   │   ├── database.go
+│   │   │   │   └── migrate.go
+│   │   │   ├── middleware
+│   │   │   │   └── middleware.go
+│   │   │   └── utils
+│   │   │       └── response.model.go
+│   │   └── users
+│   │       ├── models.go
+│   │       └── roles.go
+│   ├── Makefile
+│   ├── pkg
+│   │   ├── cache
+│   │   ├── logger
+│   │   │   └── logger.go
+│   │   └── queue
+│   ├── server
+│   │   └── main.go
+│   └── tmp
+│       ├── build-errors.log
+│       └── main
+├── Evently - Challenge.pdf
+├── project_tree.txt
+└── tree
+
+29 directories, 32 files

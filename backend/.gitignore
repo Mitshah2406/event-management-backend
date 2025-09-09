@@ -1,0 +1,101 @@
+# Binaries and build artifacts
+bin/
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Air temporary files
+# Keep the .air.toml config file but ignore temp files
+tmp/
+
+# Docker volumes
+postgres_data/
+redis_data/
+pgadmin_data/
+
+# Backup files
+*.sql.backup
+backup_*.sql
+
+# Temporary files
+*.tmp
+*.temp
+
+# Profiling files
+*.prof
+*.pprof
+trace.out
+
+# Documentation generated files
+docs/swagger.json
+docs/swagger.yaml
+
+# Upload directories
+uploads/
+static/uploads/
+
+# Certificate files
+*.pem
+*.key
+*.crt
+
+# Local configuration overrides
+.env.override
+docker-compose.override.yml
+
+# Testing
+test_coverage/
+integration_test_data/
+
+# Security and secrets
+secrets/
+*.secret
+
+# Build cache
+.buildcache/
