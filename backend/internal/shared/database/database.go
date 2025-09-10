@@ -8,7 +8,6 @@ import (
 
 	"evently/internal/shared/config"
 
-	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -17,7 +16,6 @@ import (
 // DB holds database connections
 type DB struct {
 	PostgreSQL *gorm.DB
-	Redis      *redis.Client
 }
 
 // InitDB initializes the database connections
@@ -31,15 +29,9 @@ func InitDB(cfg *config.Config) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
-	// Initialize Redis
-	rdb, err := initRedis(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize Redis: %w", err)
-	}
 
 	return &DB{
 		PostgreSQL: pg,
-		Redis:      rdb,
 	}, nil
 }
 
@@ -92,64 +84,18 @@ func initPostgreSQL(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// initRedis initializes Redis connection
-func initRedis(cfg *config.Config) (*redis.Client, error) {
-	// Redis client options
-	opts := &redis.Options{
-		Addr:     cfg.Redis.Addr,
-		Password: cfg.Redis.Password,
-		DB:       cfg.Redis.DB,
-
-		// Connection pool settings
-		PoolSize:     10,
-		MinIdleConns: 5,
-
-		// Timeouts
-		DialTimeout:  5 * time.Second,
-		ReadTimeout:  3 * time.Second,
-		WriteTimeout: 3 * time.Second,
-	}
-
-	// Create Redis client
-	rdb := redis.NewClient(opts)
-
-	// Test the connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
-	}
-
-	log.Println("✅ Redis connected successfully")
-	return rdb, nil
-}
-
 // Close closes all database connections
 func (db *DB) Close() error {
-	var errs []error
-
 	// Close PostgreSQL
 	if db.PostgreSQL != nil {
 		if sqlDB, err := db.PostgreSQL.DB(); err == nil {
 			if err := sqlDB.Close(); err != nil {
-				errs = append(errs, fmt.Errorf("failed to close PostgreSQL: %w", err))
+				return fmt.Errorf("failed to close PostgreSQL: %w", err)
 			}
 		}
 	}
 
-	// Close Redis
-	if db.Redis != nil {
-		if err := db.Redis.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close Redis: %w", err))
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("errors closing databases: %v", errs)
-	}
-
-	log.Println("✅ All database connections closed")
+	log.Println("✅ Database connection closed")
 	return nil
 }
 
@@ -166,24 +112,12 @@ func (db *DB) HealthCheck(ctx context.Context) error {
 		}
 	}
 
-	// Check Redis
-	if db.Redis != nil {
-		if err := db.Redis.Ping(ctx).Err(); err != nil {
-			return fmt.Errorf("redis ping failed: %w", err)
-		}
-	}
-
 	return nil
 }
 
 // BeginTx starts a new database transaction
 func (db *DB) BeginTx(ctx context.Context) *gorm.DB {
 	return db.PostgreSQL.WithContext(ctx).Begin()
-}
-
-// GetRedisClient returns the Redis client
-func (db *DB) GetRedisClient() *redis.Client {
-	return db.Redis
 }
 
 // GetPostgreSQL returns the PostgreSQL GORM instance

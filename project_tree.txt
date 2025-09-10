@@ -27,7 +27,11 @@
 │   │   │   ├── router.go
 │   │   │   └── service.go
 │   │   ├── bookings
+│   │   │   ├── controller.go
 │   │   │   ├── models.go
+│   │   │   ├── repository.go
+│   │   │   ├── router.go
+│   │   │   ├── service.go
 │   │   │   └── status.go
 │   │   ├── events
 │   │   │   ├── controller.go
@@ -36,6 +40,8 @@
 │   │   │   ├── router.go
 │   │   │   ├── service.go
 │   │   │   └── status.go
+│   │   ├── seats
+│   │   │   └── models.go
 │   │   ├── shared
 │   │   │   ├── config
 │   │   │   │   └── config.go
@@ -54,12 +60,15 @@
 │   │   │   ├── repository.go
 │   │   │   ├── router.go
 │   │   │   └── service.go
-│   │   └── users
-│   │       ├── models.go
-│   │       └── roles.go
+│   │   ├── users
+│   │   │   ├── models.go
+│   │   │   └── roles.go
+│   │   └── venues
+│   │       └── models.go
 │   ├── Makefile
 │   ├── pkg
 │   │   ├── cache
+│   │   │   └── redis.go
 │   │   ├── logger
 │   │   │   └── logger.go
 │   │   └── queue
@@ -69,6 +78,7 @@
 │       ├── build-errors.log
 │       └── main
 ├── Evently - Challenge.pdf
+├── Evently-Task.txt
 └── project_tree.txt
 
-31 directories, 41 files
+33 directories, 49 files

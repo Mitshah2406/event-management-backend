@@ -5,6 +5,7 @@ import (
 	"evently/api/routes"
 	"evently/internal/shared/config"
 	"evently/internal/shared/database"
+	"evently/pkg/cache"
 	"fmt"
 	"log"
 	"net/http"
@@ -37,6 +38,19 @@ func main() {
 	// Set Gin mode (debug/release)
 	gin.SetMode(cfg.GinMode)
 
+	// Initialize Redis Cache
+	if err := initializeRedis(cfg); err != nil {
+		log.Printf("Warning: Redis initialization failed: %v", err)
+		log.Println("Continuing without Redis cache...")
+	} else {
+		log.Println("✅ Redis cache initialized successfully")
+		defer func() {
+			if err := cache.Close(); err != nil {
+				log.Printf("Error closing Redis connection: %v", err)
+			}
+		}()
+	}
+
 	// Initialize DB
 	db, err := database.InitDB(cfg)
 	if err != nil {
@@ -59,6 +73,7 @@ func main() {
 		fmt.Printf("📊 Health Check: http://localhost:%s/health\n", cfg.Port)
 		fmt.Printf("📋 API Status: http://localhost:%s%s/status\n", cfg.Port, cfg.GetAPIBasePath())
 		fmt.Printf("🔍 API Version: %s\n", cfg.APIVersion)
+		fmt.Printf("🗄️  Redis Cache: %v\n", cache.IsInitialized())
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v\n", err)
 		}
@@ -100,4 +115,28 @@ func setupRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	appRouter.SetupRoutes(engine)
 
 	return engine
+}
+
+// initializeRedis sets up Redis cache using the application config
+func initializeRedis(cfg *config.Config) error {
+	// Convert app config to cache config
+	redisConfig := cache.RedisConfig{
+		Host:     cfg.Redis.Host,
+		Port:     cfg.Redis.Port,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+		Addr:     cfg.Redis.Addr,
+	}
+
+	// Initialize Redis
+	if err := cache.InitWithRedisConfig(redisConfig); err != nil {
+		return fmt.Errorf("failed to initialize Redis: %w", err)
+	}
+
+	// Test connection
+	if err := cache.Ping(); err != nil {
+		return fmt.Errorf("redis ping failed: %w", err)
+	}
+
+	return nil
 }
