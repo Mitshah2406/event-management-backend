@@ -26,7 +26,7 @@ type Event struct {
 	TotalCapacity int         `json:"total_capacity" gorm:"not null;check:total_capacity > 0"`
 	BookedCount   int         `json:"booked_count" gorm:"default:0;check:booked_count >= 0"`
 	Price         float64     `json:"price" gorm:"not null;check:price >= 0"`
-	Status        EventStatus `json:"status" gorm:"type:varchar(20);default:'draft'"`
+	Status        EventStatus `json:"status" gorm:"type:varchar(20);default:'published'"`
 	ImageURL      string      `json:"image_url" gorm:"size:500"`
 
 	// Many-to-many relationship with tags
@@ -73,7 +73,7 @@ type UpdateEventRequest struct {
 	DateTime      *time.Time `json:"date_time"`
 	TotalCapacity *int       `json:"total_capacity" binding:"omitempty,min=1,max=100000"`
 	Price         *float64   `json:"price" binding:"omitempty,min=0"`
-	Status        *string    `json:"status" binding:"omitempty,oneof=draft published cancelled completed"`
+	Status        *string    `json:"status" binding:"omitempty,oneof=published cancelled completed"`
 	ImageURL      *string    `json:"image_url" binding:"omitempty,url"`
 	Tags          []string   `json:"tags"`
 }
@@ -85,7 +85,7 @@ type EventListQuery struct {
 	Venue    string `form:"venue"`
 	DateFrom string `form:"date_from"`
 	DateTo   string `form:"date_to"`
-	Status   string `form:"status" binding:"omitempty,oneof=draft published cancelled completed"`
+	Status   string `form:"status" binding:"omitempty,oneof=published cancelled completed"`
 	Tags     string `form:"tags"`
 }
 

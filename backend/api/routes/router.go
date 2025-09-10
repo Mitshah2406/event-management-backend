@@ -3,6 +3,7 @@ package routes
 
 import (
 	"evently/internal/auth"
+	"evently/internal/bookings"
 	"evently/internal/events"
 	"evently/internal/shared/config"
 	"evently/internal/shared/database"
@@ -15,9 +16,10 @@ import (
 
 // Router holds all route dependencies
 type Router struct {
-	config     *config.Config
-	db         *database.DB
-	tagService tags.Service // For dependency injection
+	config       *config.Config
+	db           *database.DB
+	tagService   tags.Service   // For dependency injection
+	eventService events.Service // For dependency injection
 }
 
 // NewRouter creates a new router instance
@@ -38,16 +40,15 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 	{
 		// Setup auth routes
 		r.setupAuthRoutes(api)
-		
+
 		// Setup tag routes (must be before event routes for dependency injection)
 		r.setupTagRoutes(api)
-		
+
 		// Setup event routes
 		r.setupEventRoutes(api)
-		
-		// TODO: Add other route groups here
-		// r.setupBookingRoutes(api)
-		// r.setupAnalyticsRoutes(api)
+
+		// Setup booking routes
+		r.setupBookingRoutes(api)
 	}
 }
 
@@ -119,12 +120,15 @@ func (r *Router) setupEventRoutes(rg *gin.RouterGroup) {
 	// Initialize event dependencies
 	eventRepo := events.NewRepository(r.db.GetPostgreSQL())
 	eventService := events.NewService(eventRepo)
-	
+
 	// Inject tag service dependency
 	if r.tagService != nil {
 		eventService.SetTagService(r.tagService)
 	}
-	
+
+	// Store event service for dependency injection
+	r.eventService = eventService
+
 	eventController := events.NewController(eventService)
 
 	// Setup event routes
@@ -132,15 +136,21 @@ func (r *Router) setupEventRoutes(rg *gin.RouterGroup) {
 }
 
 // setupBookingRoutes configures booking management routes
-// func (r *Router) setupBookingRoutes(rg *gin.RouterGroup) {
-// 	// TODO: Implement booking routes
-// 	bookings := rg.Group("/bookings")
-// 	{
-// 		bookings.GET("/", func(c *gin.Context) {
-// 			c.JSON(http.StatusOK, gin.H{"message": "bookings endpoint"})
-// 		})
-// 	}
-// }
+func (r *Router) setupBookingRoutes(rg *gin.RouterGroup) {
+	// Initialize booking dependencies
+	bookingRepo := bookings.NewRepository(r.db.GetPostgreSQL())
+	bookingService := bookings.NewService(bookingRepo)
+
+	// Inject event service dependency if available
+	if r.eventService != nil {
+		bookingService.SetEventService(r.eventService)
+	}
+
+	bookingController := bookings.NewController(bookingService)
+
+	// Setup booking routes
+	bookings.SetupBookingRoutes(rg, bookingController)
+}
 
 // setupAnalyticsRoutes configures analytics routes
 // func (r *Router) setupAnalyticsRoutes(rg *gin.RouterGroup) {

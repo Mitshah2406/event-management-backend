@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -58,7 +59,7 @@ func JWTAuthWithConfig(cfg *config.Config) gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-
+			log.Println("JWT claims:", claims)
 			c.Set("user_id", claims["user_id"])
 			c.Set("user_email", claims["email"])
 			c.Set("user_role", claims["role"])

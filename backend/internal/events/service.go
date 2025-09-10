@@ -30,6 +30,7 @@ type Service interface {
 	GetAllEvents(query EventListQuery) (*PaginatedEvents, error)
 	GetUpcomingEvents(limit int) ([]EventResponse, error)
 	CheckEventAvailability(eventID uuid.UUID, ticketCount int) (bool, error)
+	IsEventInFuture(eventID uuid.UUID) (bool, error)
 	IncrementBookedCount(eventID uuid.UUID, increment int) error
 }
 
@@ -155,7 +156,7 @@ func (s *service) CreateEvent(userID uuid.UUID, req CreateEventRequest) (*EventR
 		DateTime:      req.DateTime,
 		TotalCapacity: req.TotalCapacity,
 		Price:         req.Price,
-		Status:        EventStatusDraft,
+		Status:        EventStatusPublished,
 		ImageURL:      req.ImageURL,
 		CreatedBy:     userID,
 		BookedCount:   0,
@@ -441,6 +442,20 @@ func (s *service) CheckEventAvailability(eventID uuid.UUID, ticketCount int) (bo
 
 func (s *service) IncrementBookedCount(eventID uuid.UUID, increment int) error {
 	return s.repo.UpdateBookedCount(eventID, increment)
+}
+
+func (s *service) IsEventInFuture(eventID uuid.UUID) (bool, error) {
+	// Get the event to check its date
+	event, err := s.repo.GetByID(eventID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, errors.New("event not found")
+		}
+		return false, fmt.Errorf("failed to get event: %w", err)
+	}
+
+	// Check if event is in the future
+	return event.DateTime.After(time.Now()), nil
 }
 
 // Admin methods - allow admins to manage any event without ownership checks

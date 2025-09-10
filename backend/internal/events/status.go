@@ -3,7 +3,6 @@ package events
 type EventStatus string
 
 const (
-	EventStatusDraft     EventStatus = "draft"
 	EventStatusPublished EventStatus = "published"
 	EventStatusCancelled EventStatus = "cancelled"
 	EventStatusCompleted EventStatus = "completed"
@@ -12,7 +11,7 @@ const (
 // IsValid checks if the event status is valid
 func (es EventStatus) IsValid() bool {
 	switch es {
-	case EventStatusDraft, EventStatusPublished, EventStatusCancelled, EventStatusCompleted:
+	case EventStatusPublished, EventStatusCancelled, EventStatusCompleted:
 		return true
 	}
 	return false
@@ -25,12 +24,12 @@ func (es EventStatus) String() string {
 
 // CanBeUpdated checks if an event with this status can be updated
 func (es EventStatus) CanBeUpdated() bool {
-	return es == EventStatusDraft || es == EventStatusPublished
+	return es == EventStatusPublished
 }
 
 // CanBeDeleted checks if an event with this status can be deleted
 func (es EventStatus) CanBeDeleted() bool {
-	return es == EventStatusDraft
+	return false
 }
 
 // CanBeBooked checks if an event with this status allows new bookings
