@@ -1,10 +1,12 @@
 package events
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"math"
+	"reflect"
 	"strings"
 	"time"
 
@@ -13,8 +15,9 @@ import (
 )
 
 type Service interface {
-	// Tag service dependency injection
+	// Service dependency injection
 	SetTagService(tagService TagService)
+	SetVenueService(venueService VenueService)
 	CreateEvent(userID uuid.UUID, req CreateEventRequest) (*EventResponse, error)
 	GetEventByID(id uuid.UUID) (*EventResponse, error)
 	// Original methods for backward compatibility
@@ -29,14 +32,15 @@ type Service interface {
 	// Common methods
 	GetAllEvents(query EventListQuery) (*PaginatedEvents, error)
 	GetUpcomingEvents(limit int) ([]EventResponse, error)
-	CheckEventAvailability(eventID uuid.UUID, ticketCount int) (bool, error)
+	CheckEventAvailability(eventID uuid.UUID, seatCount int) (bool, error)
 	IsEventInFuture(eventID uuid.UUID) (bool, error)
-	IncrementBookedCount(eventID uuid.UUID, increment int) error
+	GetEventCapacityData(eventID uuid.UUID) (totalCapacity, bookedCount, availableSeats int, err error)
 }
 
 type service struct {
-	repo       Repository
-	tagService TagService
+	repo         Repository
+	tagService   TagService
+	venueService VenueService
 }
 
 // TagService interface to avoid circular dependencies
@@ -46,12 +50,22 @@ type TagService interface {
 	GetTagsByNames(tagNames []string) ([]TagResponse, error) // Add this method
 }
 
+// VenueService interface to validate venue sections
+// We use interface{} and type assertions to avoid circular dependencies
+type VenueService interface {
+	GetSectionsByTemplateID(ctx context.Context, templateID string) (interface{}, error)
+}
+
 func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
 func (s *service) SetTagService(tagService TagService) {
 	s.tagService = tagService
+}
+
+func (s *service) SetVenueService(venueService VenueService) {
+	s.venueService = venueService
 }
 
 // Helper function to populate tags in event response
@@ -82,6 +96,27 @@ func (s *service) populateEventTags(response *EventResponse) error {
 	}
 
 	response.Tags = tags
+	return nil
+}
+
+// Helper function to populate capacity data in event response
+func (s *service) populateEventCapacity(response *EventResponse) error {
+	eventID, err := uuid.Parse(response.ID)
+	if err != nil {
+		return err
+	}
+
+	totalCapacity, bookedCount, availableSeats, err := s.GetEventCapacityData(eventID)
+	if err != nil {
+		// Don't fail the entire request if capacity data is unavailable
+		// Just leave the fields as 0
+		return nil
+	}
+
+	response.TotalCapacity = totalCapacity
+	response.BookedCount = bookedCount
+	response.AvailableTickets = availableSeats
+
 	return nil
 }
 
@@ -136,6 +171,76 @@ func (s *service) validateTagsExist(tagNames []string) error {
 	return nil
 }
 
+// validateSectionsExist checks if all provided section IDs exist and belong to the venue template
+func (s *service) validateSectionsExist(venueTemplateID uuid.UUID, sectionPricing []CreateEventSectionPricing) error {
+	if s.venueService == nil {
+		return errors.New("venue service not available")
+	}
+
+	if len(sectionPricing) == 0 {
+		return errors.New("at least one section pricing must be provided")
+	}
+
+	// Get all sections for the venue template
+	sectionsInterface, err := s.venueService.GetSectionsByTemplateID(context.TODO(), venueTemplateID.String())
+	if err != nil {
+		return fmt.Errorf("failed to fetch venue sections: %w", err)
+	}
+
+	// Use reflection to handle the interface{} response
+	sectionsValue := reflect.ValueOf(sectionsInterface)
+	if sectionsValue.Kind() != reflect.Slice {
+		return fmt.Errorf("expected slice of venue sections, got %T", sectionsInterface)
+	}
+
+	if sectionsValue.Len() == 0 {
+		return fmt.Errorf("venue template has no sections defined")
+	}
+
+	// Create a map of valid section IDs for quick lookup
+	validSectionIDs := make(map[string]bool)
+	for i := 0; i < sectionsValue.Len(); i++ {
+		section := sectionsValue.Index(i)
+		
+		// Try to get the ID field using reflection
+		if section.Kind() == reflect.Struct {
+			idField := section.FieldByName("ID")
+			if idField.IsValid() && idField.Type() == reflect.TypeOf(uuid.UUID{}) {
+				id := idField.Interface().(uuid.UUID)
+				validSectionIDs[id.String()] = true
+			}
+		}
+	}
+
+	// Validate each section ID in the request
+	var invalidSections []string
+	requestedSections := make(map[string]bool) // To check for duplicates
+
+	for _, pricing := range sectionPricing {
+		// Check for duplicates
+		if requestedSections[pricing.SectionID] {
+			return fmt.Errorf("duplicate section ID in pricing: %s", pricing.SectionID)
+		}
+		requestedSections[pricing.SectionID] = true
+
+		// Validate section ID format
+		if _, err := uuid.Parse(pricing.SectionID); err != nil {
+			return fmt.Errorf("invalid section ID format: %s", pricing.SectionID)
+		}
+
+		// Check if section exists in the venue template
+		if !validSectionIDs[pricing.SectionID] {
+			invalidSections = append(invalidSections, pricing.SectionID)
+		}
+	}
+
+	if len(invalidSections) > 0 {
+		return fmt.Errorf("the following section IDs do not exist in the venue template: %v", invalidSections)
+	}
+
+	return nil
+}
+
 func (s *service) CreateEvent(userID uuid.UUID, req CreateEventRequest) (*EventResponse, error) {
 	// Validate date is in the future
 	if req.DateTime.Before(time.Now()) {
@@ -149,21 +254,40 @@ func (s *service) CreateEvent(userID uuid.UUID, req CreateEventRequest) (*EventR
 		}
 	}
 
+	// Parse venue template ID
+	venueTemplateID, err := uuid.Parse(req.VenueTemplateID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid venue template ID: %w", err)
+	}
+
+	// VALIDATE SECTION IDs - ensure they exist and belong to the venue template
+	if len(req.SectionPricing) > 0 && s.venueService != nil {
+		if err := s.validateSectionsExist(venueTemplateID, req.SectionPricing); err != nil {
+			return nil, fmt.Errorf("section validation failed: %w", err)
+		}
+	}
+
 	event := &Event{
-		Name:          req.Name,
-		Description:   req.Description,
-		Venue:         req.Venue,
-		DateTime:      req.DateTime,
-		TotalCapacity: req.TotalCapacity,
-		Price:         req.Price,
-		Status:        EventStatusPublished,
-		ImageURL:      req.ImageURL,
-		CreatedBy:     userID,
-		BookedCount:   0,
+		Name:            req.Name,
+		Description:     req.Description,
+		Venue:           req.Venue,
+		VenueTemplateID: venueTemplateID,
+		DateTime:        req.DateTime,
+		BasePrice:       req.BasePrice,
+		Status:          EventStatusPublished,
+		ImageURL:        req.ImageURL,
+		CreatedBy:       userID,
 	}
 
 	if err := s.repo.Create(event); err != nil {
 		return nil, fmt.Errorf("failed to create event: %w", err)
+	}
+
+	// Create event pricing for each section
+	if err := s.createEventPricing(event.ID, req.SectionPricing); err != nil {
+		// If pricing creation fails, we should delete the created event
+		s.repo.Delete(event.ID) // Best effort cleanup
+		return nil, fmt.Errorf("failed to create event pricing: %w", err)
 	}
 
 	response := event.ToResponse()
@@ -175,6 +299,11 @@ func (s *service) CreateEvent(userID uuid.UUID, req CreateEventRequest) (*EventR
 			s.repo.Delete(event.ID) // Best effort cleanup
 			return nil, fmt.Errorf("failed to assign tags: %w", err)
 		}
+	}
+
+	// Populate capacity data in response
+	if err := s.populateEventCapacity(&response); err != nil {
+		return nil, fmt.Errorf("failed to populate capacity data: %w", err)
 	}
 
 	// Populate tags in response
@@ -195,6 +324,11 @@ func (s *service) GetEventByID(id uuid.UUID) (*EventResponse, error) {
 	}
 
 	response := event.ToResponse()
+
+	// Populate capacity data in response
+	if err := s.populateEventCapacity(&response); err != nil {
+		return nil, fmt.Errorf("failed to populate capacity data: %w", err)
+	}
 
 	// Populate tags in response
 	if err := s.populateEventTags(&response); err != nil {
@@ -242,15 +376,8 @@ func (s *service) UpdateEvent(id uuid.UUID, userID uuid.UUID, req UpdateEventReq
 		}
 		updates["date_time"] = *req.DateTime
 	}
-	if req.TotalCapacity != nil {
-		// Ensure new capacity is not less than current bookings
-		if *req.TotalCapacity < currentEvent.BookedCount {
-			return nil, fmt.Errorf("cannot reduce capacity below current bookings (%d)", currentEvent.BookedCount)
-		}
-		updates["total_capacity"] = *req.TotalCapacity
-	}
-	if req.Price != nil {
-		updates["price"] = *req.Price
+	if req.BasePrice != nil {
+		updates["base_price"] = *req.BasePrice
 	}
 	if req.Status != nil {
 		status := EventStatus(*req.Status)
@@ -285,6 +412,11 @@ func (s *service) UpdateEvent(id uuid.UUID, userID uuid.UUID, req UpdateEventReq
 
 	response := updatedEvent.ToResponse()
 
+	// Populate capacity data in response
+	if err := s.populateEventCapacity(&response); err != nil {
+		return nil, fmt.Errorf("failed to populate capacity data: %w", err)
+	}
+
 	// Populate tags in response
 	if err := s.populateEventTags(&response); err != nil {
 		return nil, fmt.Errorf("failed to populate tags: %w", err)
@@ -314,7 +446,11 @@ func (s *service) DeleteEvent(id uuid.UUID, userID uuid.UUID) error {
 	}
 
 	// If event has bookings, don't allow deletion
-	if currentEvent.BookedCount > 0 {
+	_, bookedCount, err := s.repo.GetEventCapacityAndBookings(id)
+	if err != nil {
+		return fmt.Errorf("failed to check event bookings: %w", err)
+	}
+	if bookedCount > 0 {
 		return errors.New("cannot delete event with existing bookings")
 	}
 
@@ -339,10 +475,16 @@ func (s *service) GetAllEvents(query EventListQuery) (*PaginatedEvents, error) {
 		return nil, fmt.Errorf("failed to get events: %w", err)
 	}
 
-	// Convert to response format and populate tags
+	// Convert to response format and populate capacity + tags
 	eventResponses := make([]EventResponse, len(events))
 	for i, event := range events {
 		response := event.ToResponse()
+		
+		// Populate capacity data for each event
+		if err := s.populateEventCapacity(&response); err != nil {
+			// Log error but don't fail the entire request
+		}
+		
 		// Populate tags for each event
 		if err := s.populateEventTags(&response); err != nil {
 			// Log error but don't fail the entire request
@@ -402,6 +544,12 @@ func (s *service) GetUpcomingEvents(limit int) ([]EventResponse, error) {
 	responses := make([]EventResponse, len(events))
 	for i, event := range events {
 		response := event.ToResponse()
+		
+		// Populate capacity data for each event
+		if err := s.populateEventCapacity(&response); err != nil {
+			// Log error but don't fail the entire request
+		}
+		
 		// Populate tags for each event
 		if err := s.populateEventTags(&response); err != nil {
 			// Log error but don't fail the entire request
@@ -412,9 +560,9 @@ func (s *service) GetUpcomingEvents(limit int) ([]EventResponse, error) {
 	return responses, nil
 }
 
-func (s *service) CheckEventAvailability(eventID uuid.UUID, ticketCount int) (bool, error) {
-	if ticketCount <= 0 {
-		return false, errors.New("ticket count must be positive")
+func (s *service) CheckEventAvailability(eventID uuid.UUID, seatCount int) (bool, error) {
+	if seatCount <= 0 {
+		return false, errors.New("seat count must be positive")
 	}
 
 	// Check if event exists and can be booked
@@ -436,12 +584,22 @@ func (s *service) CheckEventAvailability(eventID uuid.UUID, ticketCount int) (bo
 		return false, errors.New("cannot book tickets for past events")
 	}
 
-	// Check capacity
-	return s.repo.CheckCapacityAvailability(eventID, ticketCount)
+	// Check seat availability
+	return s.repo.CheckSeatAvailability(eventID, seatCount)
 }
 
-func (s *service) IncrementBookedCount(eventID uuid.UUID, increment int) error {
-	return s.repo.UpdateBookedCount(eventID, increment)
+func (s *service) GetEventCapacityData(eventID uuid.UUID) (totalCapacity, bookedCount, availableSeats int, err error) {
+	totalCapacity, bookedCount, err = s.repo.GetEventCapacityAndBookings(eventID)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to get event capacity data: %w", err)
+	}
+	
+	availableSeats = totalCapacity - bookedCount
+	if availableSeats < 0 {
+		availableSeats = 0
+	}
+	
+	return totalCapacity, bookedCount, availableSeats, nil
 }
 
 func (s *service) IsEventInFuture(eventID uuid.UUID) (bool, error) {
@@ -493,15 +651,8 @@ func (s *service) UpdateEventAsAdmin(id uuid.UUID, adminID uuid.UUID, req Update
 		}
 		updates["date_time"] = *req.DateTime
 	}
-	if req.TotalCapacity != nil {
-		// Ensure new capacity is not less than current bookings
-		if *req.TotalCapacity < currentEvent.BookedCount {
-			return nil, fmt.Errorf("cannot reduce capacity below current bookings (%d)", currentEvent.BookedCount)
-		}
-		updates["total_capacity"] = *req.TotalCapacity
-	}
-	if req.Price != nil {
-		updates["price"] = *req.Price
+	if req.BasePrice != nil {
+		updates["base_price"] = *req.BasePrice
 	}
 	if req.Status != nil {
 		status := EventStatus(*req.Status)
@@ -537,6 +688,11 @@ func (s *service) UpdateEventAsAdmin(id uuid.UUID, adminID uuid.UUID, req Update
 
 	response := updatedEvent.ToResponse()
 
+	// Populate capacity data in response
+	if err := s.populateEventCapacity(&response); err != nil {
+		return nil, fmt.Errorf("failed to populate capacity data: %w", err)
+	}
+
 	// Populate tags in response
 	if err := s.populateEventTags(&response); err != nil {
 		return nil, fmt.Errorf("failed to populate tags: %w", err)
@@ -546,8 +702,8 @@ func (s *service) UpdateEventAsAdmin(id uuid.UUID, adminID uuid.UUID, req Update
 }
 
 func (s *service) DeleteEventAsAdmin(id uuid.UUID, adminID uuid.UUID) error {
-	// Get current event
-	currentEvent, err := s.repo.GetByID(id)
+	// Check if event exists
+	_, err := s.repo.GetByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("event not found")
@@ -557,7 +713,11 @@ func (s *service) DeleteEventAsAdmin(id uuid.UUID, adminID uuid.UUID) error {
 
 	// Admin can delete events with more flexibility than regular users
 	// But still respect business logic for events with bookings
-	if currentEvent.BookedCount > 0 {
+	_, bookedCount, err := s.repo.GetEventCapacityAndBookings(id)
+	if err != nil {
+		return fmt.Errorf("failed to check event bookings: %w", err)
+	}
+	if bookedCount > 0 {
 		return errors.New("cannot delete event with existing bookings. Consider canceling the event instead")
 	}
 
@@ -594,4 +754,39 @@ func (s *service) GetAllEventAnalyticsAsAdmin() (*GlobalAnalytics, error) {
 	}
 
 	return analytics, nil
+}
+
+// createEventPricing creates event pricing entries for the given event and sections
+func (s *service) createEventPricing(eventID uuid.UUID, sectionPricing []CreateEventSectionPricing) error {
+	// Create a temporary struct to match the event_pricing table
+	type EventPricing struct {
+		ID              uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey"`
+		EventID         uuid.UUID `gorm:"type:uuid;not null;index"`
+		SectionID       uuid.UUID `gorm:"type:uuid;not null;index"`
+		PriceMultiplier float64   `gorm:"not null;default:1.0"`
+		IsActive        bool      `gorm:"default:true"`
+	}
+
+	db := s.repo.(*repository).db // Access the underlying DB
+
+	for _, pricing := range sectionPricing {
+		sectionID, err := uuid.Parse(pricing.SectionID)
+		if err != nil {
+			return fmt.Errorf("invalid section ID %s: %w", pricing.SectionID, err)
+		}
+
+		eventPricing := EventPricing{
+			ID:              uuid.New(),
+			EventID:         eventID,
+			SectionID:       sectionID,
+			PriceMultiplier: pricing.PriceMultiplier,
+			IsActive:        true,
+		}
+
+		if err := db.Table("event_pricing").Create(&eventPricing).Error; err != nil {
+			return fmt.Errorf("failed to create pricing for section %s: %w", pricing.SectionID, err)
+		}
+	}
+
+	return nil
 }

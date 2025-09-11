@@ -2,306 +2,305 @@ package bookings
 
 import (
 	"context"
-	"errors"
+	"crypto/rand"
 	"fmt"
-	"log"
+	"math/big"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
-// EventService interface to interact with events (avoid circular dependency)
-type EventService interface {
-	CheckEventAvailability(eventID uuid.UUID, ticketCount int) (bool, error)
-	IsEventInFuture(eventID uuid.UUID) (bool, error)
+// SeatService interface for seat-related operations (to avoid circular dependency)
+type SeatService interface {
+	ValidateHold(ctx context.Context, holdID string, userID string) (*HoldValidationResult, error)
+	ReleaseHold(ctx context.Context, holdID string) error
+	GetSeatsByHoldID(ctx context.Context, holdID string) ([]SeatInfo, error)
+	GetHoldDetails(ctx context.Context, holdID string) (*SeatHoldDetails, error)
+	UpdateSeatStatusToBulk(ctx context.Context, seatIDs []uuid.UUID, status string) error
 }
 
+// SeatHoldDetails represents hold details (matching seats service structure)
+type SeatHoldDetails struct {
+	HoldID  string   `json:"hold_id"`
+	UserID  string   `json:"user_id"`
+	EventID string   `json:"event_id"`
+	SeatIDs []string `json:"seat_ids"`
+	TTL     int      `json:"ttl_seconds"`
+}
+
+// Service interface defines the contract for booking business logic
 type Service interface {
-	// Core booking operations
-	CreateBooking(ctx context.Context, userID uuid.UUID, req CreateBookingRequest) (*BookingResponse, error)
-	CancelBooking(ctx context.Context, userID uuid.UUID, bookingID uuid.UUID) error
-	GetBookingDetails(ctx context.Context, userID uuid.UUID, bookingID uuid.UUID) (*BookingResponse, error)
+	ConfirmBooking(ctx context.Context, userID uuid.UUID, req BookingConfirmationRequest) (*BookingConfirmationResponse, error)
+	GetBooking(ctx context.Context, bookingID uuid.UUID) (*Booking, error)
+	GetUserBookings(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error)
+	CancelBooking(ctx context.Context, bookingID uuid.UUID, userID uuid.UUID) error
 
-	// User operations
-	GetUserBookings(ctx context.Context, userID uuid.UUID, query BookingListQuery) (*PaginatedBookings, error)
-
-	// Admin operations
-	GetAllBookings(ctx context.Context, query BookingListQuery) (*PaginatedBookings, error)
-	GetEventBookings(ctx context.Context, eventID uuid.UUID) ([]BookingResponse, error)
-	CancelBookingAsAdmin(ctx context.Context, adminID uuid.UUID, bookingID uuid.UUID) error
-	GetBookingDetailsAsAdmin(ctx context.Context, bookingID uuid.UUID) (*BookingResponse, error)
-
-	// Utility methods
-	ValidateBookingRequest(ctx context.Context, userID uuid.UUID, req CreateBookingRequest) error
-
-	// Dependency injection
-	SetEventService(eventService EventService)
+	// Payment operations
+	ProcessPayment(ctx context.Context, bookingID uuid.UUID, amount float64, method string) (*PaymentInfo, error)
 }
 
+// service implements the Service interface
 type service struct {
-	repo         Repository
-	eventService EventService
+	repo        Repository
+	seatService SeatService
 }
 
-func NewService(repo Repository) Service {
+// HoldValidationResult represents the result of hold validation
+type HoldValidationResult struct {
+	Valid     bool       `json:"valid"`
+	HoldID    string     `json:"hold_id"`
+	UserID    string     `json:"user_id"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	Seats     []SeatInfo `json:"seats"`
+}
+
+// SeatInfo represents seat information
+type SeatInfo struct {
+	ID          uuid.UUID `json:"id"`
+	SectionID   uuid.UUID `json:"section_id"`
+	SeatNumber  string    `json:"seat_number"`
+	Row         string    `json:"row"`
+	Price       float64   `json:"price"`
+	SectionName string    `json:"section_name"`
+}
+
+// NewService creates a new booking service instance
+func NewService(repo Repository, seatService SeatService) Service {
 	return &service{
-		repo: repo,
+		repo:        repo,
+		seatService: seatService,
 	}
 }
 
-// SetEventService allows injection of event service to avoid circular dependency
-func (s *service) SetEventService(eventService EventService) {
-	s.eventService = eventService
-}
-
-func (s *service) CreateBooking(ctx context.Context, userID uuid.UUID, req CreateBookingRequest) (*BookingResponse, error) {
-	// 1. Validate the request
-	if err := s.ValidateBookingRequest(ctx, userID, req); err != nil {
-		log.Println("Validation error:", err)
-		return nil, err
-	}
-	log.Print("Creating booking for user:", userID, " event:", req.EventID, " quantity:", req.Quantity)
-	// 2. Parse event ID
-	eventID, err := uuid.Parse(req.EventID)
+// ConfirmBooking processes a booking confirmation
+func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req BookingConfirmationRequest) (*BookingConfirmationResponse, error) {
+	// Step 1: Validate the hold
+	holdValidation, err := s.seatService.ValidateHold(ctx, req.HoldID, userID.String())
 	if err != nil {
-		return nil, errors.New("invalid event ID format")
+		return nil, fmt.Errorf("hold validation failed: %w", err)
 	}
 
-	// 3. Additional validation using event service if available
-	if s.eventService != nil {
-		available, err := s.eventService.CheckEventAvailability(eventID, req.Quantity)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check event availability: %w", err)
-		}
-		if !available {
-			return nil, errors.New("event is not available for the requested quantity")
-		}
+	if !holdValidation.Valid {
+		return nil, fmt.Errorf("hold is invalid or expired")
 	}
 
-	// 4. Create booking object - goes directly to CONFIRMED (immediate booking)
+	// Step 1.5: Get hold details to validate event ID
+	holdDetails, err := s.seatService.GetHoldDetails(ctx, req.HoldID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hold details: %w", err)
+	}
+
+	// Verify that the event ID in request matches the hold's event ID
+	if holdDetails.EventID != req.EventID {
+		return nil, fmt.Errorf("event ID mismatch: hold is for event %s but request is for event %s",
+			holdDetails.EventID, req.EventID)
+	}
+
+	// Step 2: Get seat information for pricing
+	seats, err := s.seatService.GetSeatsByHoldID(ctx, req.HoldID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get seats for hold: %w", err)
+	}
+
+	if len(seats) == 0 {
+		return nil, fmt.Errorf("no seats found for hold")
+	}
+
+	// Step 3: Calculate total amount
+	var totalAmount float64
+	var seatBookings []SeatBooking
+	var bookedSeats []BookedSeatInfo
+
+	for _, seat := range seats {
+		totalAmount += seat.Price
+
+		seatBooking := SeatBooking{
+			SeatID:    seat.ID,
+			SectionID: seat.SectionID,
+			SeatPrice: seat.Price,
+		}
+		seatBookings = append(seatBookings, seatBooking)
+
+		bookedSeat := BookedSeatInfo{
+			SeatID:      seat.ID.String(),
+			SectionID:   seat.SectionID.String(),
+			SeatNumber:  seat.SeatNumber,
+			Row:         seat.Row,
+			SectionName: seat.SectionName,
+			Price:       seat.Price,
+		}
+		bookedSeats = append(bookedSeats, bookedSeat)
+	}
+
+	// Step 4: Generate booking reference
+	bookingRef, err := s.generateBookingReference()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate booking reference: %w", err)
+	}
+
+	// Step 5: Parse event ID and create booking record
+	eventUUID, err := uuid.Parse(req.EventID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid event ID: %w", err)
+	}
+
 	booking := &Booking{
-		UserID:   userID,
-		EventID:  eventID,
-		Quantity: req.Quantity,
-		Status:   StatusConfirmed, // Direct confirmation for better UX
+		UserID:       userID,
+		EventID:      eventUUID, // Use the correct event ID from request
+		TotalSeats:   len(seats),
+		TotalPrice:   totalAmount,
+		Status:       "CONFIRMED",
+		BookingRef:   bookingRef,
+		SeatBookings: seatBookings,
 	}
 
-	// 5. Create booking with atomic capacity check
-	err = s.repo.CreateBookingWithCapacityCheck(ctx, booking)
+	// Step 6: Generate transaction ID for payment
+	transactionID := s.generateTransactionID()
+
+	// Step 7: Create payment record with transaction ID
+	payment := &Payment{
+		Amount:        totalAmount,
+		Currency:      "USD",
+		Status:        "PENDING",
+		PaymentMethod: req.PaymentMethod,
+		TransactionID: transactionID,
+	}
+	booking.Payments = []Payment{*payment}
+
+	// Step 8: Process in transaction (create booking, seat bookings, and payment)
+	if err := s.repo.Create(ctx, booking); err != nil {
+		return nil, fmt.Errorf("failed to create booking: %w", err)
+	}
+
+	// Note: No need to update seat status to BOOKED since:
+	// 1. Seat status constraint only allows AVAILABLE/BLOCKED
+	// 2. Booking status is tracked via seat_bookings table
+	// 3. GetEffectiveStatus() method handles event-specific booking logic
+
+	// Step 9: Process mock payment (update the existing payment to completed)
+	paymentInfo, err := s.ProcessPayment(ctx, booking.ID, totalAmount, req.PaymentMethod)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("payment processing failed: %w", err)
 	}
 
-	// 6. Get the created booking with relations
-	createdBooking, err := s.repo.GetBookingByIDWithRelations(ctx, booking.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve created booking: %w", err)
+	// Step 10: Release Redis hold
+	if err := s.seatService.ReleaseHold(ctx, req.HoldID); err != nil {
+		// Log error but don't fail the booking since payment is processed
+		fmt.Printf("Warning: Failed to release hold %s: %v\n", req.HoldID, err)
 	}
 
-	response := createdBooking.ToResponse()
-	return &response, nil
+	// Step 11: Return confirmation response
+	response := &BookingConfirmationResponse{
+		BookingID:  booking.ID.String(),
+		BookingRef: booking.BookingRef,
+		Status:     booking.Status,
+		TotalPrice: booking.TotalPrice,
+		TotalSeats: booking.TotalSeats,
+		Seats:      bookedSeats,
+		Payment:    *paymentInfo,
+		CreatedAt:  booking.CreatedAt,
+	}
+
+	return response, nil
 }
 
-func (s *service) CancelBooking(ctx context.Context, userID uuid.UUID, bookingID uuid.UUID) error {
-	// 1. Get the booking to verify ownership and current status
-	booking, err := s.repo.GetBookingByID(ctx, bookingID)
+// GetBooking retrieves a booking by ID
+func (s *service) GetBooking(ctx context.Context, bookingID uuid.UUID) (*Booking, error) {
+	return s.repo.GetByID(ctx, bookingID)
+}
+
+// GetUserBookings retrieves bookings for a specific user
+func (s *service) GetUserBookings(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error) {
+	return s.repo.GetByUserID(ctx, userID, limit, offset)
+}
+
+// CancelBooking cancels a booking and releases the seats
+func (s *service) CancelBooking(ctx context.Context, bookingID uuid.UUID, userID uuid.UUID) error {
+	// Get the booking
+	booking, err := s.repo.GetByID(ctx, bookingID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("booking not found")
-		}
 		return fmt.Errorf("failed to get booking: %w", err)
-	}
-
-	// 2. Verify ownership
-	if booking.UserID != userID {
-		return errors.New("unauthorized: you can only cancel your own bookings")
-	}
-
-	// 3. Check if booking can be cancelled
-	if booking.Status == StatusCancelled {
-		return errors.New("booking is already cancelled")
-	}
-
-	// 4. Update booking status
-	cancelledAt := time.Now()
-	err = s.repo.UpdateBookingStatus(ctx, bookingID, StatusCancelled, &cancelledAt)
-	if err != nil {
-		return fmt.Errorf("failed to cancel booking: %w", err)
-	}
-
-	// TODO: In a real system, you might want to:
-	// - Decrement the event's booked_count
-	// - Send cancellation notifications
-	// - Handle refunds if payment was processed
-
-	return nil
-}
-
-func (s *service) GetBookingDetails(ctx context.Context, userID uuid.UUID, bookingID uuid.UUID) (*BookingResponse, error) {
-	booking, err := s.repo.GetBookingByIDWithRelations(ctx, bookingID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("booking not found")
-		}
-		return nil, fmt.Errorf("failed to get booking: %w", err)
 	}
 
 	// Verify ownership
 	if booking.UserID != userID {
-		return nil, errors.New("unauthorized: you can only view your own bookings")
+		return fmt.Errorf("unauthorized: booking does not belong to user")
 	}
 
-	response := booking.ToResponse()
-	return &response, nil
-}
-
-func (s *service) GetUserBookings(ctx context.Context, userID uuid.UUID, query BookingListQuery) (*PaginatedBookings, error) {
-	bookings, totalCount, err := s.repo.GetUserBookings(ctx, userID, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user bookings: %w", err)
+	// Check if already cancelled
+	if booking.IsCancelled() {
+		return fmt.Errorf("booking is already cancelled")
 	}
 
-	// Convert to response format
-	bookingResponses := make([]BookingResponse, len(bookings))
-	for i, booking := range bookings {
-		bookingResponses[i] = booking.ToResponse()
-	}
-
-	// Set defaults for pagination
-	if query.Page <= 0 {
-		query.Page = 1
-	}
-	if query.Limit <= 0 {
-		query.Limit = 10
-	}
-
-	totalPages := CalculateTotalPages(totalCount, query.Limit)
-
-	return &PaginatedBookings{
-		Bookings:   bookingResponses,
-		TotalCount: totalCount,
-		Page:       query.Page,
-		Limit:      query.Limit,
-		TotalPages: totalPages,
-	}, nil
-}
-
-// Admin operations
-
-func (s *service) GetAllBookings(ctx context.Context, query BookingListQuery) (*PaginatedBookings, error) {
-	bookings, totalCount, err := s.repo.GetAllBookings(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get all bookings: %w", err)
-	}
-
-	// Convert to response format
-	bookingResponses := make([]BookingResponse, len(bookings))
-	for i, booking := range bookings {
-		bookingResponses[i] = booking.ToResponse()
-	}
-
-	// Set defaults for pagination
-	if query.Page <= 0 {
-		query.Page = 1
-	}
-	if query.Limit <= 0 {
-		query.Limit = 10
-	}
-
-	totalPages := CalculateTotalPages(totalCount, query.Limit)
-
-	return &PaginatedBookings{
-		Bookings:   bookingResponses,
-		TotalCount: totalCount,
-		Page:       query.Page,
-		Limit:      query.Limit,
-		TotalPages: totalPages,
-	}, nil
-}
-
-func (s *service) GetEventBookings(ctx context.Context, eventID uuid.UUID) ([]BookingResponse, error) {
-	bookings, err := s.repo.GetBookingsByEventID(ctx, eventID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get event bookings: %w", err)
-	}
-
-	// Convert to response format
-	bookingResponses := make([]BookingResponse, len(bookings))
-	for i, booking := range bookings {
-		bookingResponses[i] = booking.ToResponse()
-	}
-
-	return bookingResponses, nil
-}
-
-func (s *service) CancelBookingAsAdmin(ctx context.Context, adminID uuid.UUID, bookingID uuid.UUID) error {
-	// Admin can cancel any booking without ownership check
-	booking, err := s.repo.GetBookingByID(ctx, bookingID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("booking not found")
-		}
-		return fmt.Errorf("failed to get booking: %w", err)
-	}
-
-	// Check if booking can be cancelled
-	if booking.Status == StatusCancelled {
-		return errors.New("booking is already cancelled")
-	}
-
-	// Update booking status
-	cancelledAt := time.Now()
-	err = s.repo.UpdateBookingStatus(ctx, bookingID, StatusCancelled, &cancelledAt)
-	if err != nil {
+	// Cancel the booking
+	if err := s.repo.Cancel(ctx, bookingID); err != nil {
 		return fmt.Errorf("failed to cancel booking: %w", err)
 	}
 
+	// Seats are automatically released when booking is cancelled
+	// No need to update seat status as booking records handle the "booked" state
+
 	return nil
 }
 
-func (s *service) GetBookingDetailsAsAdmin(ctx context.Context, bookingID uuid.UUID) (*BookingResponse, error) {
-	// Admin can view any booking without ownership check
-	booking, err := s.repo.GetBookingByIDWithRelations(ctx, bookingID)
+// ProcessPayment processes a mock payment
+func (s *service) ProcessPayment(ctx context.Context, bookingID uuid.UUID, amount float64, method string) (*PaymentInfo, error) {
+	// Get the existing payment record from the booking
+	booking, err := s.repo.GetByID(ctx, bookingID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("booking not found")
-		}
 		return nil, fmt.Errorf("failed to get booking: %w", err)
 	}
 
-	response := booking.ToResponse()
-	return &response, nil
+	if len(booking.Payments) == 0 {
+		return nil, fmt.Errorf("no payment record found for booking")
+	}
+
+	// Update the existing payment to completed status
+	payment := &booking.Payments[0]
+	now := time.Now()
+	payment.Status = "COMPLETED"
+	payment.ProcessedAt = &now
+	payment.UpdatedAt = now
+
+	if err := s.repo.UpdatePayment(ctx, payment); err != nil {
+		return nil, fmt.Errorf("failed to update payment record: %w", err)
+	}
+
+	return &PaymentInfo{
+		ID:            payment.ID.String(),
+		Amount:        payment.Amount,
+		Currency:      payment.Currency,
+		Status:        payment.Status,
+		PaymentMethod: payment.PaymentMethod,
+		TransactionID: payment.TransactionID,
+		ProcessedAt:   payment.ProcessedAt,
+	}, nil
 }
 
-func (s *service) ValidateBookingRequest(ctx context.Context, userID uuid.UUID, req CreateBookingRequest) error {
-	// Basic validation
-	if req.Quantity <= 0 {
-		return errors.New("quantity must be greater than 0")
-	}
+// generateBookingReference generates a unique booking reference
+func (s *service) generateBookingReference() (string, error) {
+	timestamp := time.Now().Format("20060102")
 
-	if req.Quantity > 10 {
-		return errors.New("cannot book more than 10 tickets at once")
-	}
+	// Generate 6 random uppercase letters
+	const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	randomPart := make([]byte, 6)
 
-	// Validate event ID format
-	eventID, err := uuid.Parse(req.EventID)
-	if err != nil {
-		return errors.New("invalid event ID format")
-	}
-
-	// Check if event date is in the future
-	if s.eventService != nil {
-		isInFuture, err := s.eventService.IsEventInFuture(eventID)
-		log.Println("Event is in future:", isInFuture, " for event:", eventID)
+	for i := range randomPart {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
 		if err != nil {
-			return fmt.Errorf("failed to check event date: %w", err)
+			return "", err
 		}
-
-		if !isInFuture {
-			return errors.New("cannot book tickets for past events")
-		}
+		randomPart[i] = letters[num.Int64()]
 	}
 
-	return nil
+	return fmt.Sprintf("EVT-%s-%s", timestamp, string(randomPart)), nil
+}
+
+// generateTransactionID generates a mock transaction ID
+func (s *service) generateTransactionID() string {
+	timestamp := time.Now().Unix()
+	uuid := uuid.New().String()
+	shortUUID := strings.ReplaceAll(uuid, "-", "")[:8]
+	return fmt.Sprintf("TXN_%d_%s", timestamp, strings.ToUpper(shortUUID))
 }

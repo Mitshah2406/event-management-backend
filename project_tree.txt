@@ -33,6 +33,12 @@
 │   │   │   ├── router.go
 │   │   │   ├── service.go
 │   │   │   └── status.go
+│   │   ├── cancellation
+│   │   │   ├── controller.go
+│   │   │   ├── models.go
+│   │   │   ├── repository.go
+│   │   │   ├── router.go
+│   │   │   └── service.go
 │   │   ├── events
 │   │   │   ├── controller.go
 │   │   │   ├── models.go
@@ -41,7 +47,11 @@
 │   │   │   ├── service.go
 │   │   │   └── status.go
 │   │   ├── seats
-│   │   │   └── models.go
+│   │   │   ├── controller.go
+│   │   │   ├── models.go
+│   │   │   ├── repository.go
+│   │   │   ├── router.go
+│   │   │   └── service.go
 │   │   ├── shared
 │   │   │   ├── config
 │   │   │   │   └── config.go
@@ -64,7 +74,11 @@
 │   │   │   ├── models.go
 │   │   │   └── roles.go
 │   │   └── venues
-│   │       └── models.go
+│   │       ├── controller.go
+│   │       ├── models.go
+│   │       ├── repository.go
+│   │       ├── router.go
+│   │       └── service.go
 │   ├── Makefile
 │   ├── pkg
 │   │   ├── cache
@@ -77,8 +91,10 @@
 │   └── tmp
 │       ├── build-errors.log
 │       └── main
+├── current_flow_in_mind.txt
 ├── Evently - Challenge.pdf
 ├── Evently-Task.txt
-└── project_tree.txt
+├── project_tree.txt
+└── test.txt
 
-33 directories, 49 files
+34 directories, 64 files

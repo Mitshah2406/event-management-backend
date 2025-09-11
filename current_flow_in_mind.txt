@@ -1,0 +1,72 @@
+Evently Seat-Level Booking & Cancellation Implementation Flow
+This conversation walked through designing and planning a comprehensive seat-level booking system for the Evently platform, evolving from basic event booking to a production-ready ticketing system.
+Core Problem & Solution
+Initial State: Evently had basic event management with quantity-based booking (book X tickets) but needed seat-level selection with hold/release mechanisms and cancellation policies.
+Final Solution: Hybrid Redis + Postgres architecture with seat-level booking, 10-minute hold system, and flexible cancellation policies.
+Key Design Decisions
+
+Seat Hold Strategy: Redis for temporary holds (10min TTL) vs Postgres for confirmed bookings
+Venue Management: Pre-defined templates (Theater, Stadium, Conference) with section-based pricing
+Payment Approach: Mock payment service with clean abstraction for future Stripe/PayPal integration
+Cancellation Policies: Event-specific rules with fixed/percentage fees and deadline enforcement
+
+System Architecture Flow
+Phase 1: Seat Selection & Hold
+
+User browses event → GET /events/:id/venue/layout
+System returns seat map (Postgres) + real-time availability (Redis)
+User selects seats → POST /seats/hold
+Redis locks seats with SETNX + 10min TTL
+Background: Redis auto-expires holds (no cleanup jobs needed)
+
+Phase 2: Booking Confirmation
+
+User confirms → POST /bookings/confirm
+System validates Redis holds for user
+Database transaction:
+
+Creates Booking + SeatBooking records
+Updates seat status to BOOKED
+Processes mock payment
+Releases Redis holds
+
+
+Rollback if any step fails
+
+Phase 3: Cancellation Process
+
+User requests cancel → POST /bookings/:id/cancel
+System checks cancellation policy (deadline, fees)
+Database transaction:
+
+Creates Cancellation record
+Frees seats back to AVAILABLE
+Calculates refund amount
+Updates booking status
+
+
+
+Scalability Considerations
+Traffic Estimates: For major events (World Cup final), expect:
+
+100K tickets in 10 minutes = ~835 bookings/sec peak
+Total API traffic: 10K-80K requests/sec depending on user interest
+Database writes: ~3K writes/sec at peak
+
+Architecture Scaling:
+
+Redis Cluster for 50K+ ops/sec seat holds
+Postgres primary tuned for high write throughput
+CDN for static content + bot mitigation
+Autoscaling app instances (100+ for major events)
+
+Technical Implementation Plan
+Database Models: VenueTemplate, VenueSection, Seat, Booking, SeatBooking, CancellationPolicy, Cancellation
+Key APIs:
+
+GET /events/:id/venue/layout - Seat map with availability
+POST /seats/hold - Reserve seats (Redis)
+POST /bookings/confirm - Confirm booking (Postgres transaction)
+POST /bookings/:id/cancel - Cancel with policy enforcement
+
+Background Processes: Minimal - Redis TTL handles hold expiry automatically

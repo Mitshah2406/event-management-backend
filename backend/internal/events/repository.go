@@ -17,11 +17,11 @@ type Repository interface {
 	Delete(id uuid.UUID) error
 	GetAll(query EventListQuery) ([]Event, int64, error)
 	GetByStatus(status EventStatus) ([]Event, error)
-	UpdateBookedCount(eventID uuid.UUID, increment int) error
+	GetEventCapacityAndBookings(eventID uuid.UUID) (int, int, error)
 	GetEventAnalytics(eventID uuid.UUID) (*EventAnalytics, error)
 	GetGlobalAnalytics() (*GlobalAnalytics, error)
 	GetUpcomingEvents(limit int) ([]Event, error)
-	CheckCapacityAvailability(eventID uuid.UUID, requestedTickets int) (bool, error)
+	CheckSeatAvailability(eventID uuid.UUID, requestedSeats int) (bool, error)
 }
 
 type repository struct {
@@ -169,42 +169,58 @@ func (r *repository) GetByStatus(status EventStatus) ([]Event, error) {
 	return events, err
 }
 
-func (r *repository) UpdateBookedCount(eventID uuid.UUID, increment int) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		var event Event
-
-		// Lock the row for update
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").
-			Where("id = ?", eventID).
-			First(&event).Error; err != nil {
-			return err
-		}
-
-		// Check if the operation would result in negative booked count
-		newBookedCount := event.BookedCount + increment
-		if newBookedCount < 0 {
-			return fmt.Errorf("cannot reduce booked count below 0")
-		}
-
-		// Check if the operation would exceed capacity
-		if newBookedCount > event.TotalCapacity {
-			return fmt.Errorf("cannot exceed event capacity")
-		}
-
-		// Update the booked count
-		return tx.Model(&event).Update("booked_count", newBookedCount).Error
-	})
-}
-
-func (r *repository) CheckCapacityAvailability(eventID uuid.UUID, requestedTickets int) (bool, error) {
+func (r *repository) GetEventCapacityAndBookings(eventID uuid.UUID) (int, int, error) {
+	// First get the event's venue template ID
 	var event Event
-
 	if err := r.db.Where("id = ?", eventID).First(&event).Error; err != nil {
-		return false, err
+		return 0, 0, fmt.Errorf("failed to get event: %w", err)
 	}
 
-	availableTickets := event.TotalCapacity - event.BookedCount
-	return availableTickets >= requestedTickets, nil
+	// Get total capacity from venue sections that belong to the event's template
+	var totalCapacity int64
+	err := r.db.Table("venue_sections").
+		Select("COALESCE(SUM(total_seats), 0) as total_capacity").
+		Where("template_id = ?", event.VenueTemplateID).
+		Scan(&totalCapacity).Error
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get total capacity: %w", err)
+	}
+
+	// Get booked count from seat bookings for seats in sections of this template
+	var bookedCount int64
+	err = r.db.Table("seat_bookings").
+		Joins("JOIN bookings ON seat_bookings.booking_id = bookings.id").
+		Joins("JOIN seats ON seat_bookings.seat_id = seats.id").
+		Joins("JOIN venue_sections ON seats.section_id = venue_sections.id").
+		Where("venue_sections.template_id = ? AND seat_bookings.event_id = ? AND bookings.status = 'CONFIRMED'", 
+			event.VenueTemplateID, eventID).
+		Count(&bookedCount).Error
+	if err != nil {
+		return int(totalCapacity), 0, fmt.Errorf("failed to get booked count: %w", err)
+	}
+
+	return int(totalCapacity), int(bookedCount), nil
+}
+
+func (r *repository) CheckSeatAvailability(eventID uuid.UUID, requestedSeats int) (bool, error) {
+	// First get the event's venue template ID
+	var event Event
+	if err := r.db.Where("id = ?", eventID).First(&event).Error; err != nil {
+		return false, fmt.Errorf("failed to get event: %w", err)
+	}
+
+	// Get available seats count for the event's template (excluding booked/held seats for this event)
+	var availableSeats int64
+	err := r.db.Table("seats").
+		Joins("JOIN venue_sections ON seats.section_id = venue_sections.id").
+		Joins("LEFT JOIN seat_bookings ON seats.id = seat_bookings.seat_id AND seat_bookings.event_id = ?", eventID).
+		Where("venue_sections.template_id = ? AND seats.status = 'AVAILABLE' AND seat_bookings.id IS NULL", event.VenueTemplateID).
+		Count(&availableSeats).Error
+	if err != nil {
+		return false, fmt.Errorf("failed to check seat availability: %w", err)
+	}
+
+	return int(availableSeats) >= requestedSeats, nil
 }
 
 func (r *repository) GetEventAnalytics(eventID uuid.UUID) (*EventAnalytics, error) {
@@ -218,11 +234,30 @@ func (r *repository) GetEventAnalytics(eventID uuid.UUID) (*EventAnalytics, erro
 
 	analytics.EventID = event.ID.String()
 	analytics.EventName = event.Name
-	analytics.TotalBookings = event.BookedCount
-	analytics.TotalRevenue = float64(event.BookedCount) * event.Price
 
-	if event.TotalCapacity > 0 {
-		analytics.CapacityUtilization = (float64(event.BookedCount) / float64(event.TotalCapacity)) * 100
+	// Get capacity and booking data from seat-based system
+	totalCapacity, bookedCount, err := r.GetEventCapacityAndBookings(eventID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get capacity data: %w", err)
+	}
+
+	analytics.TotalBookings = bookedCount
+
+	// Calculate revenue from actual seat bookings
+	var totalRevenue float64
+	err = r.db.Table("seat_bookings").
+		Joins("JOIN bookings ON seat_bookings.booking_id = bookings.id").
+		Select("COALESCE(SUM(seat_bookings.seat_price), 0) as total_revenue").
+		Where("seat_bookings.event_id = ? AND bookings.status = 'CONFIRMED'", eventID).
+		Scan(&totalRevenue).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate revenue: %w", err)
+	}
+
+	analytics.TotalRevenue = totalRevenue
+
+	if totalCapacity > 0 {
+		analytics.CapacityUtilization = (float64(bookedCount) / float64(totalCapacity)) * 100
 	}
 
 	// Note: For cancellation rate and daily bookings, we would need the bookings table
@@ -255,30 +290,61 @@ func (r *repository) GetGlobalAnalytics() (*GlobalAnalytics, error) {
 	}
 	analytics.TotalEvents = int(totalEvents)
 
-	// Get total bookings and revenue
+	// Get total bookings and revenue from seat-based bookings
 	type aggregateResult struct {
-		TotalBookings int     `json:"total_bookings"`
+		TotalBookings int64   `json:"total_bookings"`
 		TotalRevenue  float64 `json:"total_revenue"`
 	}
 
 	var result aggregateResult
-	if err := r.db.Model(&Event{}).
-		Select("SUM(booked_count) as total_bookings, SUM(booked_count * price) as total_revenue").
+	if err := r.db.Table("seat_bookings").
+		Joins("JOIN bookings ON seat_bookings.booking_id = bookings.id").
+		Select("COUNT(seat_bookings.id) as total_bookings, COALESCE(SUM(seat_bookings.seat_price), 0) as total_revenue").
+		Where("bookings.status = 'CONFIRMED'").
 		Scan(&result).Error; err != nil {
 		return nil, fmt.Errorf("failed to get aggregate data: %w", err)
 	}
 
-	analytics.TotalBookings = result.TotalBookings
+	analytics.TotalBookings = int(result.TotalBookings)
 	analytics.TotalRevenue = result.TotalRevenue
 
-	// Calculate average utilization
+	// Calculate average utilization across all events
 	type utilizationResult struct {
 		AverageUtilization float64 `json:"average_utilization"`
 	}
 
 	var utilResult utilizationResult
-	if err := r.db.Model(&Event{}).
-		Select("AVG(CASE WHEN total_capacity > 0 THEN (booked_count * 100.0 / total_capacity) ELSE 0 END) as average_utilization").
+	subquery := r.db.Table("events e").
+		Select(`
+			e.id,
+			COALESCE(capacity_data.total_capacity, 0) as total_capacity,
+			COALESCE(booking_data.booked_count, 0) as booked_count,
+			CASE 
+				WHEN COALESCE(capacity_data.total_capacity, 0) > 0 
+				THEN (COALESCE(booking_data.booked_count, 0) * 100.0 / capacity_data.total_capacity)
+				ELSE 0 
+			END as utilization
+		`).
+		Joins(`
+			LEFT JOIN (
+				SELECT event_id, SUM(total_seats) as total_capacity 
+				FROM venue_sections 
+				GROUP BY event_id
+			) capacity_data ON e.id = capacity_data.event_id
+		`).
+		Joins(`
+			LEFT JOIN (
+				SELECT vs.event_id, COUNT(sb.id) as booked_count
+				FROM seat_bookings sb
+				JOIN bookings b ON sb.booking_id = b.id
+				JOIN venue_sections vs ON sb.section_id = vs.id
+				WHERE b.status = 'CONFIRMED'
+				GROUP BY vs.event_id
+			) booking_data ON e.id = booking_data.event_id
+		`)
+
+	if err := r.db.Table("(?) as event_utilization", subquery).
+		Select("AVG(utilization) as average_utilization").
 		Where("total_capacity > 0").
 		Scan(&utilResult).Error; err != nil {
 		return nil, fmt.Errorf("failed to calculate average utilization: %w", err)
@@ -286,28 +352,61 @@ func (r *repository) GetGlobalAnalytics() (*GlobalAnalytics, error) {
 
 	analytics.AverageUtilization = utilResult.AverageUtilization
 
-	// Get most popular events (top 5)
-	var popularEvents []Event
-	if err := r.db.Where("booked_count > 0").
-		Order("booked_count DESC").
+	// Get most popular events (top 5) based on actual bookings
+	type popularEventData struct {
+		EventID      string  `json:"event_id"`
+		EventName    string  `json:"event_name"`
+		BookingCount int     `json:"booking_count"`
+		TotalCapacity int    `json:"total_capacity"`
+		Revenue      float64 `json:"revenue"`
+	}
+
+	var popularEventsData []popularEventData
+	if err := r.db.Table("events e").
+		Select(`
+			e.id as event_id,
+			e.name as event_name,
+			COALESCE(booking_data.booking_count, 0) as booking_count,
+			COALESCE(capacity_data.total_capacity, 0) as total_capacity,
+			COALESCE(booking_data.revenue, 0) as revenue
+		`).
+		Joins(`
+			LEFT JOIN (
+				SELECT vs.event_id, COUNT(sb.id) as booking_count, SUM(sb.seat_price) as revenue
+				FROM seat_bookings sb
+				JOIN bookings b ON sb.booking_id = b.id
+				JOIN venue_sections vs ON sb.section_id = vs.id
+				WHERE b.status = 'CONFIRMED'
+				GROUP BY vs.event_id
+			) booking_data ON e.id = booking_data.event_id
+		`).
+		Joins(`
+			LEFT JOIN (
+				SELECT event_id, SUM(total_seats) as total_capacity 
+				FROM venue_sections 
+				GROUP BY event_id
+			) capacity_data ON e.id = capacity_data.event_id
+		`).
+		Where("booking_data.booking_count > 0").
+		Order("booking_data.booking_count DESC").
 		Limit(5).
-		Find(&popularEvents).Error; err != nil {
+		Scan(&popularEventsData).Error; err != nil {
 		return nil, fmt.Errorf("failed to get popular events: %w", err)
 	}
 
-	analytics.MostPopularEvents = make([]EventPopularity, len(popularEvents))
-	for i, event := range popularEvents {
+	analytics.MostPopularEvents = make([]EventPopularity, len(popularEventsData))
+	for i, event := range popularEventsData {
 		utilization := float64(0)
 		if event.TotalCapacity > 0 {
-			utilization = (float64(event.BookedCount) / float64(event.TotalCapacity)) * 100
+			utilization = (float64(event.BookingCount) / float64(event.TotalCapacity)) * 100
 		}
 
 		analytics.MostPopularEvents[i] = EventPopularity{
-			EventID:      event.ID.String(),
-			EventName:    event.Name,
-			BookingCount: event.BookedCount,
+			EventID:      event.EventID,
+			EventName:    event.EventName,
+			BookingCount: event.BookingCount,
 			Utilization:  utilization,
-			Revenue:      float64(event.BookedCount) * event.Price,
+			Revenue:      event.Revenue,
 		}
 	}
 
@@ -330,18 +429,25 @@ func (r *repository) GetGlobalAnalytics() (*GlobalAnalytics, error) {
 		analytics.EventsByStatus[sc.Status] = sc.Count
 	}
 
-	// Get revenue by month (last 12 months)
+	// Get revenue by month from actual bookings (last 12 months)
 	type monthlyRevenueResult struct {
 		Month   string  `json:"month"`
 		Revenue float64 `json:"revenue"`
-		Events  int     `json:"events"`
+		Events  int64   `json:"events"`
 	}
 
 	var monthlyRevenues []monthlyRevenueResult
-	if err := r.db.Model(&Event{}).
-		Select("TO_CHAR(date_time, 'YYYY-MM') as month, SUM(booked_count * price) as revenue, COUNT(*) as events").
-		Where("date_time >= ?", time.Now().AddDate(0, -12, 0)).
-		Group("TO_CHAR(date_time, 'YYYY-MM')").
+	if err := r.db.Table("bookings b").
+		Select(`
+			TO_CHAR(b.created_at, 'YYYY-MM') as month,
+			COALESCE(SUM(sb.seat_price), 0) as revenue,
+			COUNT(DISTINCT vs.event_id) as events
+		`).
+		Joins("JOIN seat_bookings sb ON b.id = sb.booking_id").
+		Joins("JOIN venue_sections vs ON sb.section_id = vs.id").
+		Joins("JOIN events e ON vs.event_id = e.id").
+		Where("b.status = 'CONFIRMED' AND b.created_at >= ?", time.Now().AddDate(0, -12, 0)).
+		Group("TO_CHAR(b.created_at, 'YYYY-MM')").
 		Order("month DESC").
 		Scan(&monthlyRevenues).Error; err != nil {
 		return nil, fmt.Errorf("failed to get monthly revenue: %w", err)
@@ -349,7 +455,11 @@ func (r *repository) GetGlobalAnalytics() (*GlobalAnalytics, error) {
 
 	analytics.RevenueByMonth = make([]MonthlyRevenue, len(monthlyRevenues))
 	for i, mr := range monthlyRevenues {
-		analytics.RevenueByMonth[i] = MonthlyRevenue(mr)
+		analytics.RevenueByMonth[i] = MonthlyRevenue{
+			Month:   mr.Month,
+			Revenue: mr.Revenue,
+			Events:  int(mr.Events),
+		}
 	}
 
 	// Placeholder for booking trends - would need bookings table for real implementation

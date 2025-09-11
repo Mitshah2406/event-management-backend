@@ -1,306 +1,220 @@
 package bookings
 
 import (
-	"log"
 	"net/http"
 	"strconv"
 
-	"evently/internal/shared/utils/response"
-
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
+// Controller handles HTTP requests for bookings
 type Controller struct {
-	service   Service
-	validator *validator.Validate
+	service Service
 }
 
+// NewController creates a new booking controller
 func NewController(service Service) *Controller {
-	return &Controller{
-		service:   service,
-		validator: validator.New(),
-	}
+	return &Controller{service: service}
 }
 
-// CreateBooking handles POST /bookings - Create a new booking
-func (c *Controller) CreateBooking(ctx *gin.Context) {
-	// Get user ID from JWT middleware
-	userID, exists := ctx.Get("user_id")
+// ConfirmBooking handles POST /api/v1/bookings/confirm
+func (c *Controller) ConfirmBooking(ctx *gin.Context) {
+	// Get user ID from JWT context (set by middleware)
+	userIDInterface, exists := ctx.Get("user_id")
 	if !exists {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "User not authenticated", nil, nil)
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
 
-	userUUID, err := uuid.Parse(userID.(string))
+	userIDStr, ok := userIDInterface.(string)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "Invalid user ID", nil, nil)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
 	// Parse request body
-	var req CreateBookingRequest
+	var req BookingConfirmationRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Invalid request body", nil, err.Error())
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request body",
+			"details": err.Error(),
+		})
 		return
 	}
 
-	// Validate request
-	if err := c.validator.Struct(&req); err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Validation failed", nil, err.Error())
-		return
-	}
-
-	// Create booking
-	booking, err := c.service.CreateBooking(ctx.Request.Context(), userUUID, req)
+	// Confirm booking
+	response, err := c.service.ConfirmBooking(ctx.Request.Context(), userID, req)
 	if err != nil {
-		// Handle different types of errors appropriately
-		switch {
-		case err.Error() == "event not found":
-			response.RespondJSON(ctx, "error", http.StatusNotFound, "Event not found", nil, nil)
-		case err.Error() == "event is fully booked" || err.Error() == "event is not available for booking":
-			response.RespondJSON(ctx, "error", http.StatusConflict, err.Error(), nil, nil)
-		case err.Error() == "invalid event ID format":
-			response.RespondJSON(ctx, "error", http.StatusBadRequest, err.Error(), nil, nil)
-		default:
-			response.RespondJSON(ctx, "error", http.StatusInternalServerError, "Failed to create booking: "+err.Error(), nil, nil)
-		}
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Failed to confirm booking",
+			"details": err.Error(),
+		})
 		return
 	}
 
-	response.RespondJSON(ctx, "success", http.StatusCreated, "Booking created successfully", booking, nil)
+	ctx.JSON(http.StatusCreated, gin.H{
+		"message": "Booking confirmed successfully",
+		"data":    response,
+	})
 }
 
-// CancelBooking handles DELETE /bookings/:id - Cancel a booking
-func (c *Controller) CancelBooking(ctx *gin.Context) {
-	// Get user ID from JWT middleware
-	userID, exists := ctx.Get("user_id")
-	if !exists {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "User not authenticated", nil, nil)
-		return
-	}
-
-	userUUID, err := uuid.Parse(userID.(string))
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "Invalid user ID", nil, nil)
-		return
-	}
-
-	// Get booking ID from URL parameter
+// GetBooking handles GET /api/v1/bookings/:id
+func (c *Controller) GetBooking(ctx *gin.Context) {
+	// Parse booking ID from URL
 	bookingIDStr := ctx.Param("id")
 	bookingID, err := uuid.Parse(bookingIDStr)
 	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Invalid booking ID", nil, nil)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking ID"})
+		return
+	}
+
+	// Get user ID from JWT context
+	userIDInterface, exists := ctx.Get("user_id")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDInterface.(string)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	// Get booking
+	booking, err := c.service.GetBooking(ctx.Request.Context(), bookingID)
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"error":   "Booking not found",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Verify ownership (non-admin users can only see their own bookings)
+	roleInterface, _ := ctx.Get("role")
+	role, _ := roleInterface.(string)
+
+	if role != "ADMIN" && booking.UserID != userID {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Booking retrieved successfully",
+		"data":    booking,
+	})
+}
+
+// GetUserBookings handles GET /api/v1/users/bookings
+func (c *Controller) GetUserBookings(ctx *gin.Context) {
+	// Get user ID from JWT context
+	userIDInterface, exists := ctx.Get("user_id")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDInterface.(string)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	// Parse pagination parameters
+	limitStr := ctx.DefaultQuery("limit", "10")
+	offsetStr := ctx.DefaultQuery("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 0 {
+		limit = 10
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	// Get user bookings
+	bookings, err := c.service.GetUserBookings(ctx.Request.Context(), userID, limit, offset)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to get user bookings",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Bookings retrieved successfully",
+		"data": gin.H{
+			"bookings": bookings,
+			"count":    len(bookings),
+			"limit":    limit,
+			"offset":   offset,
+		},
+	})
+}
+
+// CancelBooking handles POST /api/v1/bookings/:id/cancel
+func (c *Controller) CancelBooking(ctx *gin.Context) {
+	// Parse booking ID from URL
+	bookingIDStr := ctx.Param("id")
+	bookingID, err := uuid.Parse(bookingIDStr)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid booking ID"})
+		return
+	}
+
+	// Get user ID from JWT context
+	userIDInterface, exists := ctx.Get("user_id")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDInterface.(string)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
 	// Cancel booking
-	err = c.service.CancelBooking(ctx.Request.Context(), userUUID, bookingID)
+	err = c.service.CancelBooking(ctx.Request.Context(), bookingID, userID)
 	if err != nil {
-		switch {
-		case err.Error() == "booking not found":
-			response.RespondJSON(ctx, "error", http.StatusNotFound, "Booking not found", nil, nil)
-		case err.Error() == "unauthorized: you can only cancel your own bookings":
-			response.RespondJSON(ctx, "error", http.StatusForbidden, "Unauthorized to cancel this booking", nil, nil)
-		case err.Error() == "booking is already cancelled":
-			response.RespondJSON(ctx, "error", http.StatusConflict, "Booking is already cancelled", nil, nil)
-		default:
-			response.RespondJSON(ctx, "error", http.StatusInternalServerError, "Failed to cancel booking", nil, nil)
-		}
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Failed to cancel booking",
+			"details": err.Error(),
+		})
 		return
 	}
 
-	response.RespondJSON(ctx, "success", http.StatusOK, "Booking cancelled successfully", nil, nil)
-}
-
-// GetBookingDetails handles GET /bookings/:id - Get booking details
-func (c *Controller) GetBookingDetails(ctx *gin.Context) {
-	// Get user ID from JWT middleware
-	userID, exists := ctx.Get("user_id")
-	if !exists {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "User not authenticated", nil, nil)
-		return
-	}
-
-	userUUID, err := uuid.Parse(userID.(string))
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "Invalid user ID", nil, nil)
-		return
-	}
-
-	// Get booking ID from URL parameter
-	bookingIDStr := ctx.Param("id")
-	bookingID, err := uuid.Parse(bookingIDStr)
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Invalid booking ID", nil, nil)
-		return
-	}
-
-	// Get booking details
-	booking, err := c.service.GetBookingDetails(ctx.Request.Context(), userUUID, bookingID)
-	if err != nil {
-		switch {
-		case err.Error() == "booking not found":
-			response.RespondJSON(ctx, "error", http.StatusNotFound, "Booking not found", nil, nil)
-		case err.Error() == "unauthorized: you can only view your own bookings":
-			response.RespondJSON(ctx, "error", http.StatusForbidden, "Unauthorized to view this booking", nil, nil)
-		default:
-			response.RespondJSON(ctx, "error", http.StatusInternalServerError, "Failed to get booking details", nil, nil)
-		}
-		return
-	}
-
-	response.RespondJSON(ctx, "success", http.StatusOK, "Booking details retrieved successfully", booking, nil)
-}
-
-// GetUserBookings handles GET /bookings/user/:id - Get user's booking history
-func (c *Controller) GetUserBookings(ctx *gin.Context) {
-	// Get user ID from JWT middleware
-	userID, exists := ctx.Get("user_id")
-	log.Println("userID from context:", userID, " exists:", exists)
-	if !exists {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "User not authenticated", nil, nil)
-		return
-	}
-
-	userUUID, err := uuid.Parse(userID.(string))
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "Invalid user ID", nil, nil)
-		return
-	}
-
-	// Parse query parameters
-	var query BookingListQuery
-	if err := ctx.ShouldBindQuery(&query); err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Invalid query parameters", nil, err.Error())
-		return
-	}
-
-	// Get user bookings
-	bookings, err := c.service.GetUserBookings(ctx.Request.Context(), userUUID, query)
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusInternalServerError, "Failed to get user bookings", nil, nil)
-		return
-	}
-
-	response.RespondJSON(ctx, "success", http.StatusOK, "User bookings retrieved successfully", bookings, nil)
-}
-
-// Admin endpoints
-
-// GetAllBookings handles GET /admin/bookings - Get all bookings (admin only)
-func (c *Controller) GetAllBookings(ctx *gin.Context) {
-	// Parse query parameters
-	var query BookingListQuery
-	if err := ctx.ShouldBindQuery(&query); err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Invalid query parameters", nil, err.Error())
-		return
-	}
-
-	// Get all bookings
-	bookings, err := c.service.GetAllBookings(ctx.Request.Context(), query)
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusInternalServerError, "Failed to get all bookings", nil, nil)
-		return
-	}
-
-	response.RespondJSON(ctx, "success", http.StatusOK, "All bookings retrieved successfully", bookings, nil)
-}
-
-// GetEventBookings handles GET /admin/events/:eventId/bookings - Get event bookings (admin only)
-func (c *Controller) GetEventBookings(ctx *gin.Context) {
-	// Get event ID from URL parameter
-	eventIDStr := ctx.Param("eventId")
-	eventID, err := uuid.Parse(eventIDStr)
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Invalid event ID", nil, nil)
-		return
-	}
-
-	// Get event bookings
-	bookings, err := c.service.GetEventBookings(ctx.Request.Context(), eventID)
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusInternalServerError, "Failed to get event bookings", nil, nil)
-		return
-	}
-
-	response.RespondJSON(ctx, "success", http.StatusOK, "Event bookings retrieved successfully", bookings, nil)
-}
-
-// CancelBookingAsAdmin handles DELETE /admin/bookings/:id - Cancel booking as admin
-func (c *Controller) CancelBookingAsAdmin(ctx *gin.Context) {
-	// Get admin ID from JWT middleware
-	adminID, exists := ctx.Get("user_id")
-	if !exists {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "User not authenticated", nil, nil)
-		return
-	}
-
-	adminUUID, err := uuid.Parse(adminID.(string))
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusUnauthorized, "Invalid admin ID", nil, nil)
-		return
-	}
-
-	// Get booking ID from URL parameter
-	bookingIDStr := ctx.Param("id")
-	bookingID, err := uuid.Parse(bookingIDStr)
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Invalid booking ID", nil, nil)
-		return
-	}
-
-	// Cancel booking as admin
-	err = c.service.CancelBookingAsAdmin(ctx.Request.Context(), adminUUID, bookingID)
-	if err != nil {
-		switch {
-		case err.Error() == "booking not found":
-			response.RespondJSON(ctx, "error", http.StatusNotFound, "Booking not found", nil, nil)
-		case err.Error() == "booking is already cancelled":
-			response.RespondJSON(ctx, "error", http.StatusConflict, "Booking is already cancelled", nil, nil)
-		default:
-			response.RespondJSON(ctx, "error", http.StatusInternalServerError, "Failed to cancel booking", nil, nil)
-		}
-		return
-	}
-
-	response.RespondJSON(ctx, "success", http.StatusOK, "Booking cancelled successfully by admin", nil, nil)
-}
-
-// GetBookingDetailsAsAdmin handles GET /admin/bookings/:id - Get booking details as admin
-func (c *Controller) GetBookingDetailsAsAdmin(ctx *gin.Context) {
-	// Get booking ID from URL parameter
-	bookingIDStr := ctx.Param("id")
-	bookingID, err := uuid.Parse(bookingIDStr)
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Invalid booking ID", nil, nil)
-		return
-	}
-
-	// Get booking details as admin
-	booking, err := c.service.GetBookingDetailsAsAdmin(ctx.Request.Context(), bookingID)
-	if err != nil {
-		switch {
-		case err.Error() == "booking not found":
-			response.RespondJSON(ctx, "error", http.StatusNotFound, "Booking not found", nil, nil)
-		default:
-			response.RespondJSON(ctx, "error", http.StatusInternalServerError, "Failed to get booking details", nil, nil)
-		}
-		return
-	}
-
-	response.RespondJSON(ctx, "success", http.StatusOK, "Booking details retrieved successfully", booking, nil)
-}
-
-// Helper function to parse integer from string with default value
-func parseIntWithDefault(str string, defaultValue int) int {
-	if str == "" {
-		return defaultValue
-	}
-	val, err := strconv.Atoi(str)
-	if err != nil {
-		return defaultValue
-	}
-	return val
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Booking cancelled successfully",
+	})
 }

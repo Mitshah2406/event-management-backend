@@ -59,6 +59,12 @@ type RedisConfig struct {
 	Password string
 	DB       int
 	Addr     string
+	
+	// TTL values for different operations
+	SeatHoldTTL time.Duration
+	SessionTTL  time.Duration
+	CacheTTL    time.Duration
+	TempDataTTL time.Duration
 }
 
 // JWTConfig holds JWT configuration
@@ -125,6 +131,12 @@ func Load() *Config {
 			Port:     getEnv("REDIS_PORT", "6379"),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getIntEnv("REDIS_DB", 0),
+			
+			// TTL configurations with defaults
+			SeatHoldTTL: getDurationEnv("REDIS_SEAT_HOLD_TTL", 10*time.Minute),
+			SessionTTL:  getDurationEnv("REDIS_SESSION_TTL", 24*time.Hour),
+			CacheTTL:    getDurationEnv("REDIS_CACHE_TTL", 1*time.Hour),
+			TempDataTTL: getDurationEnv("REDIS_TEMP_DATA_TTL", 5*time.Minute),
 		},
 
 		// JWT configuration

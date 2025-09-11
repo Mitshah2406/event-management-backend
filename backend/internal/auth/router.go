@@ -2,7 +2,7 @@ package auth
 
 import (
 	"evently/internal/shared/config"
-	"evently/internal/shared/middleware" // Ensure middleware does NOT import from auth; move shared logic if needed
+	"evently/internal/shared/middleware"
 
 	"github.com/gin-gonic/gin"
 )

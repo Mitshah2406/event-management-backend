@@ -6,34 +6,45 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupBookingRoutes(router *gin.RouterGroup, controller *Controller) {
-	// User routes - authenticated users can manage their own bookings
-	userBookings := router.Group("/bookings")
-	userBookings.Use(middleware.JWTAuth()) // Apply JWT authentication middleware
+// SetupBookingRoutes configures all booking-related routes
+func SetupBookingRoutes(rg *gin.RouterGroup, controller *Controller) {
+	// Booking routes
+	bookings := rg.Group("/bookings")
+	bookings.Use(middleware.JWTAuth(), middleware.RequireRoles("USER", "ADMIN"))
 	{
 		// Core booking operations
-		userBookings.POST("", controller.CreateBooking)          // POST /api/v1/bookings - Create a booking
-		userBookings.DELETE("/:id", controller.CancelBooking)    // DELETE /api/v1/bookings/:id - Cancel a booking
-		userBookings.GET("/:id", controller.GetBookingDetails)   // GET /api/v1/bookings/:id - Get booking details
-		userBookings.GET("/user/me", controller.GetUserBookings) // GET /api/v1/bookings/user/me - Get current user's bookings
+		bookings.POST("/confirm", controller.ConfirmBooking)   // POST /api/v1/bookings/confirm
+		bookings.GET("/:id", controller.GetBooking)            // GET /api/v1/bookings/:id
+		bookings.POST("/:id/cancel", controller.CancelBooking) // POST /api/v1/bookings/:id/cancel
 	}
 
-	// Admin routes - admin users can manage all bookings
-	adminBookings := router.Group("/admin/bookings")
-	adminBookings.Use(middleware.JWTAuth())      // Apply JWT authentication
-	adminBookings.Use(middleware.RequireAdmin()) // Require admin role
+	// User-specific booking routes
+	users := rg.Group("/users")
+	users.Use(middleware.JWTAuth(), middleware.RequireRoles("USER", "ADMIN"))
 	{
-		// Admin booking management
-		adminBookings.GET("", controller.GetAllBookings)               // GET /api/v1/admin/bookings - Get all bookings
-		adminBookings.GET("/:id", controller.GetBookingDetailsAsAdmin) // GET /api/v1/admin/bookings/:id - Get any booking details
-		adminBookings.DELETE("/:id", controller.CancelBookingAsAdmin)  // DELETE /api/v1/admin/bookings/:id - Cancel any booking
-	}
-
-	// Admin event-specific booking routes
-	adminEvents := router.Group("/admin/events/bookings")
-	adminEvents.Use(middleware.JWTAuth())      // Apply JWT authentication
-	adminEvents.Use(middleware.RequireAdmin()) // Require admin role
-	{
-		adminEvents.GET("/:eventId", controller.GetEventBookings) // GET /api/v1/admin/events/:eventId/bookings - Get event bookings
+		users.GET("/bookings", controller.GetUserBookings) // GET /api/v1/users/bookings
 	}
 }
+
+// Route definitions for reference:
+//
+// BOOKING CONFIRMATION
+// POST   /api/v1/bookings/confirm                     - Confirm a held booking
+// Request body: { "hold_id": "hold_xxx", "payment_method": "credit_card" }
+//
+// BOOKING RETRIEVAL
+// GET    /api/v1/bookings/:id                         - Get specific booking
+//
+// BOOKING CANCELLATION
+// POST   /api/v1/bookings/:id/cancel                  - Cancel a booking
+//
+// USER BOOKINGS
+// GET    /api/v1/users/bookings?limit=10&offset=0     - Get user's bookings with pagination
+//
+// Key Flow After Seat Holding:
+// 1. User holds seats with POST /seats/hold
+// 2. User confirms booking with POST /bookings/confirm
+// 3. System validates hold, processes payment, creates booking
+// 4. Seats are marked as BOOKED, Redis hold is released
+// 5. User can view booking with GET /bookings/:id
+// 6. User can cancel booking with POST /bookings/:id/cancel

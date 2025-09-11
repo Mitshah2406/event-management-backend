@@ -2,308 +2,231 @@ package bookings
 
 import (
 	"context"
-	"errors"
-	"evently/internal/events"
 	"fmt"
-	"log"
-	"math"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
+// Repository interface defines the contract for booking data operations
 type Repository interface {
-	// Core booking operations
-	CreateBooking(ctx context.Context, booking *Booking) error
-	GetBookingByID(ctx context.Context, id uuid.UUID) (*Booking, error)
-	GetBookingByIDWithRelations(ctx context.Context, id uuid.UUID) (*Booking, error)
-	UpdateBookingStatus(ctx context.Context, id uuid.UUID, status Status, cancelledAt *time.Time) error
+	Create(ctx context.Context, booking *Booking) error
+	GetByID(ctx context.Context, id uuid.UUID) (*Booking, error)
+	GetByHoldID(ctx context.Context, holdID string) (*Booking, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error)
+	Update(ctx context.Context, booking *Booking) error
+	Cancel(ctx context.Context, id uuid.UUID) error
 
-	// User booking operations
-	GetUserBookings(ctx context.Context, userID uuid.UUID, query BookingListQuery) ([]Booking, int64, error)
+	// Payment operations
+	CreatePayment(ctx context.Context, payment *Payment) error
+	UpdatePayment(ctx context.Context, payment *Payment) error
+	GetPaymentByID(ctx context.Context, paymentID uuid.UUID) (*Payment, error)
 
-	// Admin operations
-	GetAllBookings(ctx context.Context, query BookingListQuery) ([]Booking, int64, error)
-	GetBookingsByEventID(ctx context.Context, eventID uuid.UUID) ([]Booking, error)
-
-	// Concurrency-safe booking creation
-	CreateBookingWithCapacityCheck(ctx context.Context, booking *Booking) error
-
-	// Capacity and validation
-	CheckEventCapacity(ctx context.Context, eventID uuid.UUID, requestedQuantity int) (bool, error)
-	GetEventBookedCount(ctx context.Context, eventID uuid.UUID) (int, error)
+	// Seat booking operations
+	CreateSeatBookings(ctx context.Context, seatBookings []SeatBooking) error
+	GetSeatBookingsByBookingID(ctx context.Context, bookingID uuid.UUID) ([]SeatBooking, error)
 }
 
+// repository implements the Repository interface
 type repository struct {
 	db *gorm.DB
 }
 
+// NewRepository creates a new booking repository instance
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-func (r *repository) CreateBooking(ctx context.Context, booking *Booking) error {
-	return r.db.WithContext(ctx).Create(booking).Error
-}
-
-func (r *repository) GetBookingByID(ctx context.Context, id uuid.UUID) (*Booking, error) {
-	var booking Booking
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&booking).Error
-	if err != nil {
-		return nil, err
-	}
-	return &booking, nil
-}
-
-func (r *repository) GetBookingByIDWithRelations(ctx context.Context, id uuid.UUID) (*Booking, error) {
-	var booking Booking
-	err := r.db.WithContext(ctx).
-		Preload("User").
-		Preload("Event").
-		Where("id = ?", id).
-		First(&booking).Error
-	if err != nil {
-		return nil, err
-	}
-	return &booking, nil
-}
-
-func (r *repository) UpdateBookingStatus(ctx context.Context, id uuid.UUID, status Status, cancelledAt *time.Time) error {
-	updates := map[string]interface{}{
-		"status":     status,
-		"updated_at": time.Now(),
-	}
-
-	if cancelledAt != nil {
-		updates["cancelled_at"] = *cancelledAt
-	}
-
-	return r.db.WithContext(ctx).
-		Model(&Booking{}).
-		Where("id = ?", id).
-		Updates(updates).Error
-}
-
-func (r *repository) GetUserBookings(ctx context.Context, userID uuid.UUID, query BookingListQuery) ([]Booking, int64, error) {
-	var bookings []Booking
-	var totalCount int64
-
-	// Set defaults
-	if query.Page <= 0 {
-		query.Page = 1
-	}
-	if query.Limit <= 0 {
-		query.Limit = 10
-	}
-
-	// Build base query
-	baseQuery := r.db.WithContext(ctx).
-		Model(&Booking{}).
-		Where("user_id = ?", userID)
-
-	// Apply filters
-	baseQuery = r.applyFilters(baseQuery, query)
-
-	// Get total count
-	if err := baseQuery.Count(&totalCount).Error; err != nil {
-		return nil, 0, err
-	}
-
-	// Get paginated results with relations
-	offset := (query.Page - 1) * query.Limit
-	err := baseQuery.
-		Preload("User").
-		Preload("Event").
-		Order("created_at DESC").
-		Offset(offset).
-		Limit(query.Limit).
-		Find(&bookings).Error
-
-	return bookings, totalCount, err
-}
-
-func (r *repository) GetAllBookings(ctx context.Context, query BookingListQuery) ([]Booking, int64, error) {
-	var bookings []Booking
-	var totalCount int64
-
-	// Set defaults
-	if query.Page <= 0 {
-		query.Page = 1
-	}
-	if query.Limit <= 0 {
-		query.Limit = 10
-	}
-
-	// Build base query
-	baseQuery := r.db.WithContext(ctx).Model(&Booking{})
-
-	// Apply filters
-	baseQuery = r.applyFilters(baseQuery, query)
-
-	// Get total count
-	if err := baseQuery.Count(&totalCount).Error; err != nil {
-		return nil, 0, err
-	}
-
-	// Get paginated results with relations
-	offset := (query.Page - 1) * query.Limit
-	err := baseQuery.
-		Preload("User").
-		Preload("Event").
-		Order("created_at DESC").
-		Offset(offset).
-		Limit(query.Limit).
-		Find(&bookings).Error
-
-	return bookings, totalCount, err
-}
-
-func (r *repository) GetBookingsByEventID(ctx context.Context, eventID uuid.UUID) ([]Booking, error) {
-	var bookings []Booking
-	err := r.db.WithContext(ctx).
-		Preload("User").
-		Where("event_id = ?", eventID).
-		Where("status = ?", StatusConfirmed). // Only confirmed bookings
-		Order("created_at DESC").
-		Find(&bookings).Error
-
-	return bookings, err
-}
-
-// CreateBookingWithCapacityCheck creates a booking atomically with capacity validation
-func (r *repository) CreateBookingWithCapacityCheck(ctx context.Context, booking *Booking) error {
+// Create creates a new booking with all related seat bookings and payment in a transaction
+func (r *repository) Create(ctx context.Context, booking *Booking) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 1. Lock the event row for update to prevent race conditions
-		var event struct {
-			ID            uuid.UUID `gorm:"column:id"`
-			TotalCapacity int       `gorm:"column:total_capacity"`
-			BookedCount   int       `gorm:"column:booked_count"`
-			Status        string    `gorm:"column:status"`
-		}
+		// Store associations temporarily
+		seatBookings := booking.SeatBookings
+		payments := booking.Payments
+		
+		// Clear associations to avoid GORM auto-creating them
+		booking.SeatBookings = nil
+		booking.Payments = nil
 
-		err := tx.Table("events").
-			Select("id, total_capacity, booked_count, status").
-			Where("id = ?", booking.EventID).
-			Set("gorm:query_option", "FOR UPDATE").
-			First(&event).Error
-
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return errors.New("event not found")
-			}
-			return fmt.Errorf("failed to lock event: %w", err)
-		}
-
-		// 2. Check if event can be booked
-		if event.Status != "published" {
-			return errors.New("event is not available for booking")
-		}
-
-		// 3. Check capacity
-		newBookedCount := event.BookedCount + booking.Quantity
-		if newBookedCount > event.TotalCapacity {
-			availableTickets := event.TotalCapacity - event.BookedCount
-			if availableTickets <= 0 {
-				return errors.New("event is fully booked")
-			}
-			return fmt.Errorf("insufficient capacity: only %d tickets available, requested %d",
-				availableTickets, booking.Quantity)
-		}
-		log.Println("Capacity check passed: event", event.ID, " total capacity:", event.TotalCapacity, " booked count:", event.BookedCount, " requested:", booking.Quantity, " new booked count:", newBookedCount)
-		// 4. Create the booking
+		// Create the main booking record first
 		if err := tx.Create(booking).Error; err != nil {
 			return fmt.Errorf("failed to create booking: %w", err)
 		}
 
-		// 5. Update event booked count
-		err = tx.Model(&events.Event{}).
-			Where("id = ?", booking.EventID).
-			Update("booked_count", newBookedCount).Error
-		if err != nil {
-			return fmt.Errorf("failed to update event booked count: %w", err)
+		// Create seat bookings with the generated BookingID
+		if len(seatBookings) > 0 {
+			for i := range seatBookings {
+				seatBookings[i].BookingID = booking.ID
+			}
+			if err := tx.Create(&seatBookings).Error; err != nil {
+				return fmt.Errorf("failed to create seat bookings: %w", err)
+			}
+			booking.SeatBookings = seatBookings
+		}
+
+		// Create payment records with the generated BookingID
+		if len(payments) > 0 {
+			for i := range payments {
+				payments[i].BookingID = booking.ID
+			}
+			if err := tx.Create(&payments).Error; err != nil {
+				return fmt.Errorf("failed to create payments: %w", err)
+			}
+			booking.Payments = payments
 		}
 
 		return nil
 	})
 }
 
-func (r *repository) CheckEventCapacity(ctx context.Context, eventID uuid.UUID, requestedQuantity int) (bool, error) {
-	var event struct {
-		TotalCapacity int    `gorm:"column:total_capacity"`
-		BookedCount   int    `gorm:"column:booked_count"`
-		Status        string `gorm:"column:status"`
-	}
-
+// GetByID retrieves a booking by its ID with all related data
+func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*Booking, error) {
+	var booking Booking
 	err := r.db.WithContext(ctx).
-		Table("events").
-		Select("total_capacity, booked_count, status").
-		Where("id = ?", eventID).
-		First(&event).Error
+		Preload("SeatBookings").
+		Preload("Payments").
+		First(&booking, "id = ?", id).Error
 
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, errors.New("event not found")
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("booking not found")
 		}
-		return false, err
+		return nil, fmt.Errorf("failed to get booking: %w", err)
 	}
 
-	if event.Status != "published" {
-		return false, errors.New("event is not available for booking")
-	}
-
-	availableCapacity := event.TotalCapacity - event.BookedCount
-	return availableCapacity >= requestedQuantity, nil
+	return &booking, nil
 }
 
-func (r *repository) GetEventBookedCount(ctx context.Context, eventID uuid.UUID) (int, error) {
-	var bookedCount int
+// GetByHoldID retrieves a booking by hold ID
+func (r *repository) GetByHoldID(ctx context.Context, holdID string) (*Booking, error) {
+	var booking Booking
 	err := r.db.WithContext(ctx).
-		Model(&Booking{}).
-		Where("event_id = ?", eventID).
-		Where("status = ?", StatusConfirmed). // Only count confirmed bookings
-		Select("COALESCE(SUM(quantity), 0)").
-		Scan(&bookedCount).Error
+		Preload("SeatBookings").
+		Preload("Payments").
+		First(&booking, "booking_ref = ?", holdID).Error
 
-	return bookedCount, err
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("booking not found for hold ID: %s", holdID)
+		}
+		return nil, fmt.Errorf("failed to get booking by hold ID: %w", err)
+	}
+
+	return &booking, nil
 }
 
-// applyFilters applies query filters to the GORM query
-func (r *repository) applyFilters(query *gorm.DB, filters BookingListQuery) *gorm.DB {
-	// Filter by status
-	if filters.Status != "" {
-		query = query.Where("status = ?", filters.Status)
+// GetByUserID retrieves bookings for a specific user with pagination
+func (r *repository) GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error) {
+	var bookings []Booking
+	query := r.db.WithContext(ctx).
+		Preload("SeatBookings").
+		Preload("Payments").
+		Where("user_id = ?", userID).
+		Order("created_at DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if offset > 0 {
+		query = query.Offset(offset)
 	}
 
-	// Filter by event ID
-	if filters.EventID != "" {
-		if eventID, err := uuid.Parse(filters.EventID); err == nil {
-			query = query.Where("event_id = ?", eventID)
-		}
+	err := query.Find(&bookings).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user bookings: %w", err)
 	}
 
-	// Filter by date range
-	if filters.DateFrom != "" {
-		if dateFrom, err := time.Parse("2006-01-02", filters.DateFrom); err == nil {
-			query = query.Where("created_at >= ?", dateFrom)
-		}
-	}
-
-	if filters.DateTo != "" {
-		if dateTo, err := time.Parse("2006-01-02", filters.DateTo); err == nil {
-			// Add 23:59:59 to include the entire day
-			dateTo = dateTo.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-			query = query.Where("created_at <= ?", dateTo)
-		}
-	}
-
-	return query
+	return bookings, nil
 }
 
-// Helper function to calculate total pages
-func CalculateTotalPages(totalCount int64, limit int) int {
-	if limit <= 0 {
-		return 0
+// Update updates an existing booking
+func (r *repository) Update(ctx context.Context, booking *Booking) error {
+	booking.UpdatedAt = time.Now()
+	err := r.db.WithContext(ctx).Save(booking).Error
+	if err != nil {
+		return fmt.Errorf("failed to update booking: %w", err)
 	}
-	return int(math.Ceil(float64(totalCount) / float64(limit)))
+	return nil
+}
+
+// Cancel cancels a booking and all its related seat bookings
+func (r *repository) Cancel(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Get the booking first
+		var booking Booking
+		if err := tx.First(&booking, "id = ?", id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fmt.Errorf("booking not found")
+			}
+			return fmt.Errorf("failed to get booking: %w", err)
+		}
+
+		// Cancel the booking
+		booking.Cancel()
+		if err := tx.Save(&booking).Error; err != nil {
+			return fmt.Errorf("failed to cancel booking: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// CreatePayment creates a new payment record
+func (r *repository) CreatePayment(ctx context.Context, payment *Payment) error {
+	err := r.db.WithContext(ctx).Create(payment).Error
+	if err != nil {
+		return fmt.Errorf("failed to create payment: %w", err)
+	}
+	return nil
+}
+
+// UpdatePayment updates an existing payment record
+func (r *repository) UpdatePayment(ctx context.Context, payment *Payment) error {
+	payment.UpdatedAt = time.Now()
+	err := r.db.WithContext(ctx).Save(payment).Error
+	if err != nil {
+		return fmt.Errorf("failed to update payment: %w", err)
+	}
+	return nil
+}
+
+// GetPaymentByID retrieves a payment by its ID
+func (r *repository) GetPaymentByID(ctx context.Context, paymentID uuid.UUID) (*Payment, error) {
+	var payment Payment
+	err := r.db.WithContext(ctx).First(&payment, "id = ?", paymentID).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("payment not found")
+		}
+		return nil, fmt.Errorf("failed to get payment: %w", err)
+	}
+	return &payment, nil
+}
+
+// CreateSeatBookings creates multiple seat booking records
+func (r *repository) CreateSeatBookings(ctx context.Context, seatBookings []SeatBooking) error {
+	if len(seatBookings) == 0 {
+		return nil
+	}
+
+	err := r.db.WithContext(ctx).Create(&seatBookings).Error
+	if err != nil {
+		return fmt.Errorf("failed to create seat bookings: %w", err)
+	}
+	return nil
+}
+
+// GetSeatBookingsByBookingID retrieves all seat bookings for a specific booking
+func (r *repository) GetSeatBookingsByBookingID(ctx context.Context, bookingID uuid.UUID) ([]SeatBooking, error) {
+	var seatBookings []SeatBooking
+	err := r.db.WithContext(ctx).
+		Where("booking_id = ?", bookingID).
+		Find(&seatBookings).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get seat bookings: %w", err)
+	}
+
+	return seatBookings, nil
 }

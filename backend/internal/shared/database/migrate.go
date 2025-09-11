@@ -2,21 +2,44 @@ package database
 
 import (
 	"evently/internal/bookings"
+	"evently/internal/cancellation"
 	"evently/internal/events"
+	"evently/internal/seats"
 	"evently/internal/tags"
 	"evently/internal/users"
-	"log"
+	"evently/internal/venues"
 
 	"gorm.io/gorm"
 )
 
 func Migrate(db *gorm.DB) error {
-	log.Println("Running database migrations...")
+
 	return db.AutoMigrate(
+		// Users first
 		&users.User{},
+
+		// Tags
 		&tags.Tag{},
+
+		// Venue templates and sections
+		&venues.VenueTemplate{},
+		&venues.VenueSection{},
+
+		// Seats
+		&seats.Seat{},
+
+		// Events and relationships
 		&events.Event{},
 		&tags.EventTag{},
+		&venues.EventPricing{},
+
+		// Bookings and payments
 		&bookings.Booking{},
+		&bookings.SeatBooking{},
+		&bookings.Payment{},
+
+		// Cancellation policies and cancellations
+		&cancellation.CancellationPolicy{},
+		&cancellation.Cancellation{},
 	)
 }

@@ -8,6 +8,7 @@ import (
 
 	"evently/internal/shared/config"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -16,6 +17,7 @@ import (
 // DB holds database connections
 type DB struct {
 	PostgreSQL *gorm.DB
+	Redis      *redis.Client
 }
 
 // InitDB initializes the database connections
@@ -30,8 +32,17 @@ func InitDB(cfg *config.Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
+	// Initialize Redis
+	redisClient, err := initRedis(cfg)
+	if err != nil {
+		log.Printf("⚠️  Redis initialization failed: %v", err)
+		log.Println("⚠️  Continuing without Redis - seat holding will be disabled")
+		redisClient = nil // Continue without Redis for now
+	}
+
 	return &DB{
 		PostgreSQL: pg,
+		Redis:      redisClient,
 	}, nil
 }
 
@@ -84,6 +95,28 @@ func initPostgreSQL(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
+// initRedis initializes Redis connection
+func initRedis(cfg *config.Config) (*redis.Client, error) {
+	// Create Redis client
+	client := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+
+	// Test the connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := client.Ping(ctx).Err(); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("failed to ping Redis: %w", err)
+	}
+
+	log.Println("✅ Redis connected successfully")
+	return client, nil
+}
+
 // Close closes all database connections
 func (db *DB) Close() error {
 	// Close PostgreSQL
@@ -95,7 +128,14 @@ func (db *DB) Close() error {
 		}
 	}
 
-	log.Println("✅ Database connection closed")
+	// Close Redis
+	if db.Redis != nil {
+		if err := db.Redis.Close(); err != nil {
+			return fmt.Errorf("failed to close Redis: %w", err)
+		}
+	}
+
+	log.Println("✅ Database connections closed")
 	return nil
 }
 
@@ -112,6 +152,13 @@ func (db *DB) HealthCheck(ctx context.Context) error {
 		}
 	}
 
+	// Check Redis
+	if db.Redis != nil {
+		if err := db.Redis.Ping(ctx).Err(); err != nil {
+			return fmt.Errorf("Redis ping failed: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -123,4 +170,9 @@ func (db *DB) BeginTx(ctx context.Context) *gorm.DB {
 // GetPostgreSQL returns the PostgreSQL GORM instance
 func (db *DB) GetPostgreSQL() *gorm.DB {
 	return db.PostgreSQL
+}
+
+// GetRedis returns the Redis client instance
+func (db *DB) GetRedis() *redis.Client {
+	return db.Redis
 }
