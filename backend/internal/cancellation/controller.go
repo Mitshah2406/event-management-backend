@@ -165,7 +165,7 @@ func (c *Controller) RequestCancellation(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusCreated, gin.H{
-		"message": "Cancellation request submitted successfully",
+		"message": "Cancellation processed successfully. Refund will be credited within the specified processing days.",
 		"data":    cancellation,
 	})
 }

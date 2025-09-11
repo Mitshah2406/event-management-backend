@@ -90,11 +90,11 @@
 │   │   └── main.go
 │   └── tmp
 │       ├── build-errors.log
-│       └── main
+│       ├── main
+│       └── server
 ├── current_flow_in_mind.txt
 ├── Evently - Challenge.pdf
 ├── Evently-Task.txt
-├── project_tree.txt
-└── test.txt
+└── project_tree.txt
 
 34 directories, 64 files

@@ -20,6 +20,7 @@ type CancellationPolicy struct {
 }
 
 // Cancellation defines the structure for booking cancellations
+// Note: Cancellations are automatically processed upon request for better UX
 type Cancellation struct {
 	ID              uuid.UUID  `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	BookingID       uuid.UUID  `gorm:"type:uuid;unique;not null" json:"booking_id"`
@@ -28,7 +29,7 @@ type Cancellation struct {
 	CancellationFee float64    `gorm:"default:0" json:"cancellation_fee"`
 	RefundAmount    float64    `gorm:"default:0" json:"refund_amount"`
 	Reason          string     `json:"reason"`
-	Status          string     `gorm:"type:varchar(20);check:status IN ('PENDING', 'APPROVED', 'PROCESSED', 'REJECTED');default:'PENDING'" json:"status"`
+	Status          string     `gorm:"type:varchar(20);check:status IN ('PROCESSED', 'FAILED');default:'PROCESSED'" json:"status"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }

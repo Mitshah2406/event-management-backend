@@ -56,7 +56,7 @@ func SetupCancellationRoutes(rg *gin.RouterGroup, controller *Controller) {
 // }
 //
 // USER - CANCELLATION REQUESTS
-// POST   /api/v1/bookings/:id/request-cancel         - Request cancellation for booking
+// POST   /api/v1/bookings/:id/request-cancel         - Request cancellation for booking (Auto-processed)
 // Request body: { "reason": "Unable to attend due to personal reasons" }
 //
 // CANCELLATION TRACKING
@@ -67,5 +67,6 @@ func SetupCancellationRoutes(rg *gin.RouterGroup, controller *Controller) {
 // 1. Admin creates cancellation policy for event
 // 2. User requests cancellation for their booking
 // 3. System validates eligibility and calculates fees
-// 4. Cancellation request is created with PENDING status
-// 5. Admin can later approve/process the cancellation
+// 4. Cancellation is automatically approved and processed instantly
+// 5. Booking status updated to CANCELLED and seats are freed for other users
+// 6. Refund amount is calculated and will be processed within policy timeframe

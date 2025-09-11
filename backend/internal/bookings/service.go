@@ -35,6 +35,7 @@ type Service interface {
 	GetBooking(ctx context.Context, bookingID uuid.UUID) (*Booking, error)
 	GetUserBookings(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error)
 	CancelBooking(ctx context.Context, bookingID uuid.UUID, userID uuid.UUID) error
+	CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error
 
 	// Payment operations
 	ProcessPayment(ctx context.Context, bookingID uuid.UUID, amount float64, method string) (*PaymentInfo, error)
@@ -240,6 +241,31 @@ func (s *service) CancelBooking(ctx context.Context, bookingID uuid.UUID, userID
 
 	// Seats are automatically released when booking is cancelled
 	// No need to update seat status as booking records handle the "booked" state
+
+	return nil
+}
+
+// CancelBookingInternal cancels a booking without user verification (for internal use by cancellation service)
+func (s *service) CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error {
+	// Get the booking
+	booking, err := s.repo.GetByID(ctx, bookingID)
+	if err != nil {
+		return fmt.Errorf("failed to get booking: %w", err)
+	}
+
+	// Check if already cancelled
+	if booking.IsCancelled() {
+		return fmt.Errorf("booking is already cancelled")
+	}
+
+	// Cancel the booking
+	if err := s.repo.Cancel(ctx, bookingID); err != nil {
+		return fmt.Errorf("failed to cancel booking: %w", err)
+	}
+
+	// Seats are automatically released when booking is cancelled
+	// The seat_bookings table tracks which seats are booked for which booking
+	// When booking status becomes CANCELLED, those seats become available again
 
 	return nil
 }

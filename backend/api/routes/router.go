@@ -266,6 +266,10 @@ func (b *BookingServiceAdapter) GetBooking(ctx context.Context, bookingID uuid.U
 	}, nil
 }
 
+func (b *BookingServiceAdapter) CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error {
+	return b.bookingService.CancelBookingInternal(ctx, bookingID)
+}
+
 // SeatServiceAdapter adapts seats.Service to bookings.SeatService interface
 type SeatServiceAdapter struct {
 	seatService seats.Service

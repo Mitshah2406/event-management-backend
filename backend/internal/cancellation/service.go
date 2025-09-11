@@ -14,12 +14,12 @@ type Service interface {
 	CreateCancellationPolicy(ctx context.Context, eventID uuid.UUID, req CancellationPolicyRequest) (*CancellationPolicy, error)
 	GetCancellationPolicy(ctx context.Context, eventID uuid.UUID) (*CancellationPolicy, error)
 	UpdateCancellationPolicy(ctx context.Context, eventID uuid.UUID, req CancellationPolicyRequest) (*CancellationPolicy, error)
-	
+
 	// Cancellation management
 	RequestCancellation(ctx context.Context, bookingID uuid.UUID, userID uuid.UUID, req CancellationRequest) (*Cancellation, error)
 	GetCancellation(ctx context.Context, cancellationID uuid.UUID) (*Cancellation, error)
 	GetUserCancellations(ctx context.Context, userID uuid.UUID) ([]Cancellation, error)
-	
+
 	// Business logic helpers
 	CalculateCancellationFee(ctx context.Context, bookingID uuid.UUID) (float64, float64, error) // fee, refund
 	ValidateCancellationEligibility(ctx context.Context, bookingID uuid.UUID) error
@@ -28,17 +28,18 @@ type Service interface {
 // BookingService interface for booking-related operations (to avoid circular dependency)
 type BookingService interface {
 	GetBooking(ctx context.Context, bookingID uuid.UUID) (BookingInfo, error)
+	CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error
 }
 
 // BookingInfo represents booking information for cancellation calculations
 type BookingInfo struct {
-	ID          uuid.UUID `json:"id"`
-	UserID      uuid.UUID `json:"user_id"`
-	EventID     uuid.UUID `json:"event_id"`
-	TotalPrice  float64   `json:"total_price"`
-	Status      string    `json:"status"`
-	BookingRef  string    `json:"booking_ref"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID         uuid.UUID `json:"id"`
+	UserID     uuid.UUID `json:"user_id"`
+	EventID    uuid.UUID `json:"event_id"`
+	TotalPrice float64   `json:"total_price"`
+	Status     string    `json:"status"`
+	BookingRef string    `json:"booking_ref"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // CancellationPolicyRequest represents a request to create/update cancellation policy
@@ -162,18 +163,27 @@ func (s *service) RequestCancellation(ctx context.Context, bookingID uuid.UUID, 
 		return nil, fmt.Errorf("failed to calculate cancellation fee: %w", err)
 	}
 
-	// Create cancellation record
+	// Create cancellation record with instant approval
+	now := time.Now()
 	cancellation := &Cancellation{
 		BookingID:       bookingID,
-		RequestedAt:     time.Now(),
+		RequestedAt:     now,
+		ProcessedAt:     &now, // Process immediately
 		CancellationFee: cancellationFee,
 		RefundAmount:    refundAmount,
 		Reason:          req.Reason,
-		Status:          "PENDING",
+		Status:          "PROCESSED", // Auto-approve and process instantly
 	}
 
 	if err := s.repo.CreateCancellation(ctx, cancellation); err != nil {
 		return nil, fmt.Errorf("failed to create cancellation: %w", err)
+	}
+
+	// Update booking status to CANCELLED and free up seats
+	if err := s.bookingService.CancelBookingInternal(ctx, bookingID); err != nil {
+		// Log error but don't fail the cancellation since refund record is already created
+		// TODO: Add proper logging here
+		return cancellation, fmt.Errorf("cancellation created but failed to update booking status: %w", err)
 	}
 
 	return cancellation, nil
