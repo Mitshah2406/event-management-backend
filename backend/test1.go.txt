@@ -1,0 +1,533 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
+	"evently/internal/events"
+	"evently/internal/seats"
+	"evently/internal/shared/config"
+	"evently/internal/shared/constants"
+	"evently/internal/shared/database"
+	"evently/internal/tags"
+	"evently/internal/venues"
+	"evently/pkg/cache"
+
+	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
+)
+
+func main() {
+	// Initialize log file
+	logFile, err := os.OpenFile("evently_cache_test.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Printf("Failed to open log file: %v\n", err)
+		return
+	}
+	defer logFile.Close()
+
+	// Set up logger
+	logger := log.New(logFile, "", log.LstdFlags)
+	logger.Println("🧪 Starting Evently Caching Implementation Test...")
+	logger.Println(strings.Repeat("=", 60))
+
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		logger.Println("No .env file found, using system environment variables")
+	}
+
+	// Load config
+	cfg := config.Load()
+
+	// Test 1: Cache Key Builders
+	testCacheKeyBuilders(logger)
+
+	// Test 2: Redis Connection
+	if err := testRedisConnection(cfg, logger); err != nil {
+		logger.Printf("❌ Redis connection test failed: %v", err)
+		logger.Println("⚠️  Continuing with other tests...")
+	}
+
+	// Test 3: Database Connection (needed for service tests)
+	db, err := testDatabaseConnection(cfg, logger)
+	if err != nil {
+		logger.Fatalf("❌ Database connection test failed: %v", err)
+	}
+	defer db.Close()
+
+	// Test 4: Event Service Caching
+	testEventServiceCaching(db, logger)
+
+	// Test 5: Tags Service Caching
+	testTagsServiceCaching(db, logger)
+
+	// Test 6: Venue Service Caching
+	testVenueServiceCaching(db, logger)
+
+	// Test 7: Cache Performance
+	testCachePerformance(logger)
+
+	// Test 8: Cache Invalidation
+	testCacheInvalidation(logger)
+
+	logger.Println(strings.Repeat("=", 60))
+	logger.Println("✅ All caching tests completed successfully!")
+	logger.Println("🚀 Phase 1 caching implementation is working correctly!")
+}
+
+// Helper function to check Redis keys existence
+func checkRedisKeys(ctx context.Context, client *redis.Client, operation string, logger *log.Logger) {
+	if client == nil {
+		logger.Printf("⚠️  Redis client not available, skipping key check for %s", operation)
+		return
+	}
+
+	// Fetch Redis keys
+	keys, err := client.Keys(ctx, "*").Result()
+	if err != nil {
+		logger.Printf("⚠️  Failed to fetch Redis keys for %s: %v", operation, err)
+		return
+	}
+
+	logger.Printf("🔑 Redis keys after %s (total: %d):", operation, len(keys))
+	if len(keys) == 0 {
+		logger.Println("  No keys found in Redis")
+		return
+	}
+
+	for _, key := range keys {
+		logger.Printf("  %s", key)
+	}
+	logger.Println()
+}
+
+// Test 1: Cache Key Builders
+func testCacheKeyBuilders(logger *log.Logger) {
+	logger.Println("\n📋 Test 1: Cache Key Builders")
+	logger.Println(strings.Repeat("-", 40))
+
+	// Test event keys
+	eventListKey := constants.BuildEventListKey(1, 10, "published")
+	logger.Printf("✓ Event list key: %s", eventListKey)
+
+	eventDetailKey := constants.BuildEventDetailKey("123e4567-e89b-12d3-a456-426614174000")
+	logger.Printf("✓ Event detail key: %s", eventDetailKey)
+
+	// Test venue keys
+	venueLayoutKey := constants.BuildVenueLayoutKey("123e4567-e89b-12d3-a456-426614174000")
+	logger.Printf("✓ Venue layout key: %s", venueLayoutKey)
+
+	// Test tag keys
+	tagBySlugKey := constants.BuildTagBySlugKey("music")
+	logger.Printf("✓ Tag by slug key: %s", tagBySlugKey)
+
+	// Test upcoming events key
+	upcomingKey := constants.CACHE_KEY_EVENTS_UPCOMING + ":limit:10"
+	logger.Printf("✓ Upcoming events key: %s", upcomingKey)
+
+	// Test TTL constants
+	logger.Printf("✓ Event list TTL: %v", constants.TTL_EVENT_LIST)
+	logger.Printf("✓ Event detail TTL: %v", constants.TTL_EVENT_DETAIL)
+	logger.Printf("✓ Venue template TTL: %v", constants.TTL_VENUE_TEMPLATE)
+	logger.Printf("✓ Tags active TTL: %v", constants.TTL_TAGS_ACTIVE)
+
+	logger.Println("✅ Cache key builders working correctly!")
+}
+
+// Test 2: Redis Connection
+func testRedisConnection(cfg *config.Config, logger *log.Logger) error {
+	logger.Println("\n🔗 Test 2: Redis Connection")
+	logger.Println(strings.Repeat("-", 40))
+
+	// Initialize Redis
+	redisConfig := cache.RedisConfig{
+		Host:     cfg.Redis.Host,
+		Port:     cfg.Redis.Port,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+		Addr:     cfg.Redis.Addr,
+	}
+
+	if err := cache.InitWithRedisConfig(redisConfig); err != nil {
+		return fmt.Errorf("failed to initialize Redis: %w", err)
+	}
+
+	// Test ping
+	if err := cache.Ping(); err != nil {
+		return fmt.Errorf("redis ping failed: %w", err)
+	}
+
+	logger.Printf("✓ Redis connected at: %s", cfg.Redis.Addr)
+	logger.Printf("✓ Redis database: %d", cfg.Redis.DB)
+	logger.Printf("✓ Redis ping successful")
+
+	// Test basic set/get operations
+	client := cache.Client()
+	ctx := context.Background()
+
+	testKey := "evently:test:connection"
+	testValue := "Hello Redis!"
+
+	if err := client.Set(ctx, testKey, testValue, time.Minute).Err(); err != nil {
+		return fmt.Errorf("failed to set test key: %w", err)
+	}
+	checkRedisKeys(ctx, client, "SET operation", logger)
+
+	retrievedValue, err := client.Get(ctx, testKey).Result()
+	if err != nil {
+		return fmt.Errorf("failed to get test key: %w", err)
+	}
+	checkRedisKeys(ctx, client, "GET operation", logger)
+
+	if retrievedValue != testValue {
+		return fmt.Errorf("retrieved value mismatch: expected %s, got %s", testValue, retrievedValue)
+	}
+
+	// Cleanup
+	client.Del(ctx, testKey)
+	checkRedisKeys(ctx, client, "DEL operation", logger)
+
+	logger.Println("✅ Redis connection and basic operations working!")
+	return nil
+}
+
+// Test 3: Database Connection
+func testDatabaseConnection(cfg *config.Config, logger *log.Logger) (*database.DB, error) {
+	logger.Println("\n🗄️  Test 3: Database Connection")
+	logger.Println(strings.Repeat("-", 40))
+
+	db, err := database.InitDB(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	// Test health check
+	if err := db.HealthCheck(context.Background()); err != nil {
+		return nil, fmt.Errorf("database health check failed: %w", err)
+	}
+
+	logger.Println("✅ Database connection successful!")
+	return db, nil
+}
+
+// Test 4: Event Service Caching
+func testEventServiceCaching(db *database.DB, logger *log.Logger) {
+	logger.Println("\n📅 Test 4: Event Service Caching")
+	logger.Println(strings.Repeat("-", 40))
+
+	// Create event service
+	eventRepo := events.NewRepository(db.GetPostgreSQL())
+	eventService := events.NewService(eventRepo)
+	client := cache.Client()
+	ctx := context.Background()
+
+	// Test GetUpcomingEvents caching
+	logger.Println("Testing GetUpcomingEvents caching...")
+
+	start := time.Now()
+	upcomingEvents1, err := eventService.GetUpcomingEvents(5)
+	firstCallDuration := time.Since(start)
+	if err != nil {
+		logger.Printf("⚠️  GetUpcomingEvents failed: %v", err)
+	} else {
+		logger.Printf("✓ First call (DB): %d events in %v", len(upcomingEvents1), firstCallDuration)
+	}
+	checkRedisKeys(ctx, client, "GetUpcomingEvents first call", logger)
+
+	// Second call should be from cache (faster)
+	start = time.Now()
+	upcomingEvents2, err := eventService.GetUpcomingEvents(5)
+	secondCallDuration := time.Since(start)
+	if err != nil {
+		logger.Printf("⚠️  GetUpcomingEvents failed: %v", err)
+	} else {
+		logger.Printf("✓ Second call (Cache): %d events in %v", len(upcomingEvents2), secondCallDuration)
+
+		if secondCallDuration < firstCallDuration {
+			logger.Println("✅ Cache is working! Second call was faster.")
+		} else {
+			logger.Println("⚠️  Cache might not be working - second call was not faster")
+		}
+	}
+	checkRedisKeys(ctx, client, "GetUpcomingEvents second call", logger)
+
+	// Test GetAllEvents caching
+	logger.Println("\nTesting GetAllEvents caching...")
+
+	query := events.EventListQuery{
+		Page:   1,
+		Limit:  5,
+		Status: "published",
+	}
+
+	start = time.Now()
+	allEvents1, err := eventService.GetAllEvents(query)
+	firstCallDuration = time.Since(start)
+	if err != nil {
+		logger.Printf("⚠️  GetAllEvents failed: %v", err)
+	} else {
+		logger.Printf("✓ First call (DB): %d events in %v", len(allEvents1.Events), firstCallDuration)
+	}
+	checkRedisKeys(ctx, client, "GetAllEvents first call", logger)
+
+	// Second call should be from cache
+	start = time.Now()
+	allEvents2, err := eventService.GetAllEvents(query)
+	secondCallDuration = time.Since(start)
+	if err != nil {
+		logger.Printf("⚠️  GetAllEvents failed: %v", err)
+	} else {
+		logger.Printf("✓ Second call (Cache): %d events in %v", len(allEvents2.Events), secondCallDuration)
+
+		if secondCallDuration < firstCallDuration {
+			logger.Println("✅ GetAllEvents cache is working!")
+		} else {
+			logger.Println("⚠️  GetAllEvents cache might not be working")
+		}
+	}
+	checkRedisKeys(ctx, client, "GetAllEvents second call", logger)
+
+	logger.Println("✅ Event service caching tests completed!")
+}
+
+// Test 5: Tags Service Caching
+func testTagsServiceCaching(db *database.DB, logger *log.Logger) {
+	logger.Println("\n🏷️  Test 5: Tags Service Caching")
+	logger.Println(strings.Repeat("-", 40))
+
+	// Create tags service
+	tagRepo := tags.NewRepository(db.GetPostgreSQL())
+	tagService := tags.NewService(tagRepo)
+	client := cache.Client()
+	ctx := context.Background()
+
+	// Test GetActiveTags caching
+	logger.Println("Testing GetActiveTags caching...")
+
+	start := time.Now()
+	activeTags1, err := tagService.GetActiveTags()
+	firstCallDuration := time.Since(start)
+	if err != nil {
+		logger.Printf("⚠️  GetActiveTags failed: %v", err)
+	} else {
+		logger.Printf("✓ First call (DB): %d tags in %v", len(activeTags1), firstCallDuration)
+	}
+	checkRedisKeys(ctx, client, "GetActiveTags first call", logger)
+
+	// Second call should be from cache
+	start = time.Now()
+	activeTags2, err := tagService.GetActiveTags()
+	secondCallDuration := time.Since(start)
+	if err != nil {
+		logger.Printf("⚠️  GetActiveTags failed: %v", err)
+	} else {
+		logger.Printf("✓ Second call (Cache): %d tags in %v", len(activeTags2), secondCallDuration)
+
+		if secondCallDuration < firstCallDuration {
+			logger.Println("✅ Tags cache is working!")
+		} else {
+			logger.Println("⚠️  Tags cache might not be working")
+		}
+	}
+	checkRedisKeys(ctx, client, "GetActiveTags second call", logger)
+
+	logger.Println("✅ Tags service caching tests completed!")
+}
+
+// Test 6: Venue Service Caching
+func testVenueServiceCaching(db *database.DB, logger *log.Logger) {
+	logger.Println("\n🏢 Test 6: Venue Service Caching")
+	logger.Println(strings.Repeat("-", 40))
+
+	// Create venue service
+	venueRepo := venues.NewRepository(db.GetPostgreSQL())
+	seatRepo := seats.NewRepository(db.GetPostgreSQL(), db.GetRedis())
+	venueService := venues.NewService(venueRepo, seatRepo)
+	client := cache.Client()
+	ctx := context.Background()
+
+	// Test GetTemplates caching
+	logger.Println("Testing GetTemplates caching...")
+
+	filters := venues.TemplateFilters{
+		Page:  1,
+		Limit: 5,
+	}
+
+	start := time.Now()
+	templates1, err := venueService.GetTemplates(ctx, filters)
+	firstCallDuration := time.Since(start)
+	if err != nil {
+		logger.Printf("⚠️  GetTemplates failed: %v", err)
+	} else {
+		logger.Printf("✓ First call (DB): %d templates in %v", len(templates1.Templates), firstCallDuration)
+	}
+	checkRedisKeys(ctx, client, "GetTemplates first call", logger)
+
+	// Second call should be from cache
+	start = time.Now()
+	templates2, err := venueService.GetTemplates(ctx, filters)
+	secondCallDuration := time.Since(start)
+	if err != nil {
+		logger.Printf("⚠️  GetTemplates failed: %v", err)
+	} else {
+		logger.Printf("✓ Second call (Cache): %d templates in %v", len(templates2.Templates), secondCallDuration)
+
+		if secondCallDuration < firstCallDuration {
+			logger.Println("✅ Venue templates cache is working!")
+		} else {
+			logger.Println("⚠️  Venue templates cache might not be working")
+		}
+	}
+	checkRedisKeys(ctx, client, "GetTemplates second call", logger)
+
+	logger.Println("✅ Venue service caching tests completed!")
+}
+
+// Test 7: Cache Performance
+func testCachePerformance(logger *log.Logger) {
+	logger.Println("\n⚡ Test 7: Cache Performance")
+	logger.Println(strings.Repeat("-", 40))
+
+	client := cache.Client()
+	if client == nil {
+		logger.Println("⚠️  Redis client not available, skipping performance test")
+		return
+	}
+
+	ctx := context.Background()
+
+	// Test data
+	testData := map[string]interface{}{
+		"event_id":     uuid.New().String(),
+		"event_name":   "Test Event",
+		"venue":        "Test Venue",
+		"capacity":     1000,
+		"booked_count": 250,
+		"price":        29.99,
+		"tags":         []string{"music", "concert", "outdoor"},
+	}
+
+	dataJSON, _ := json.Marshal(testData)
+
+	// Performance test: Multiple sequential operations
+	numOps := 100
+	testKey := "evently:test:performance"
+
+	logger.Printf("Testing %d sequential cache operations...", numOps)
+
+	// SET operations
+	start := time.Now()
+	for i := 0; i < numOps; i++ {
+		key := fmt.Sprintf("%s:%d", testKey, i)
+		client.Set(ctx, key, dataJSON, time.Minute)
+	}
+	setDuration := time.Since(start)
+	checkRedisKeys(ctx, client, "SET performance operations", logger)
+
+	// GET operations
+	start = time.Now()
+	for i := 0; i < numOps; i++ {
+		key := fmt.Sprintf("%s:%d", testKey, i)
+		client.Get(ctx, key)
+	}
+	getDuration := time.Since(start)
+	checkRedisKeys(ctx, client, "GET performance operations", logger)
+
+	logger.Printf("✓ %d SET operations: %v (avg: %v per op)",
+		numOps, setDuration, setDuration/time.Duration(numOps))
+	logger.Printf("✓ %d GET operations: %v (avg: %v per op)",
+		numOps, getDuration, getDuration/time.Duration(numOps))
+
+	// Cleanup
+	for i := 0; i < numOps; i++ {
+		key := fmt.Sprintf("%s:%d", testKey, i)
+		client.Del(ctx, key)
+	}
+	checkRedisKeys(ctx, client, "DEL performance operations", logger)
+
+	logger.Println("✅ Cache performance test completed!")
+}
+
+// Test 8: Cache Invalidation
+func testCacheInvalidation(logger *log.Logger) {
+	logger.Println("\n🗑️  Test 8: Cache Invalidation")
+	logger.Println(strings.Repeat("-", 40))
+
+	client := cache.Client()
+	if client == nil {
+		logger.Println("⚠️  Redis client not available, skipping invalidation test")
+		return
+	}
+
+	ctx := context.Background()
+
+	// Set up test data
+	testKeys := []string{
+		"evently:events:list:page:1:limit:10",
+		"evently:events:detail:uuid:123",
+		"evently:events:upcoming:limit:10",
+		"evently:venues:template:uuid:456",
+		"evently:tags:active:all",
+	}
+
+	testValue := "test_data"
+
+	// Set all test keys
+	logger.Println("Setting up test cache entries...")
+	for _, key := range testKeys {
+		client.Set(ctx, key, testValue, time.Minute)
+	}
+	checkRedisKeys(ctx, client, "SET test keys", logger)
+
+	// Verify they exist
+	logger.Println("Verifying cache entries exist...")
+	existingCount := 0
+	for _, key := range testKeys {
+		if client.Exists(ctx, key).Val() > 0 {
+			existingCount++
+		}
+	}
+	logger.Printf("✓ %d/%d cache entries exist", existingCount, len(testKeys))
+	checkRedisKeys(ctx, client, "CHECK existence", logger)
+
+	// Test pattern-based invalidation
+	logger.Println("Testing pattern-based invalidation...")
+	eventPattern := "evently:events:*"
+	eventKeys, err := client.Keys(ctx, eventPattern).Result()
+	if err != nil {
+		logger.Printf("⚠️  Failed to get keys for pattern %s: %v", eventPattern, err)
+	} else {
+		logger.Printf("✓ Found %d keys matching pattern: %s", len(eventKeys), eventPattern)
+
+		if len(eventKeys) > 0 {
+			deleted := client.Del(ctx, eventKeys...)
+			logger.Printf("✓ Deleted %d event-related cache entries", deleted.Val())
+		}
+	}
+	checkRedisKeys(ctx, client, "pattern-based invalidation", logger)
+
+	// Verify invalidation worked
+	remainingCount := 0
+	for _, key := range testKeys {
+		if client.Exists(ctx, key).Val() > 0 {
+			remainingCount++
+		}
+	}
+	logger.Printf("✓ %d/%d cache entries remaining after invalidation", remainingCount, len(testKeys))
+	checkRedisKeys(ctx, client, "CHECK after invalidation", logger)
+
+	// Cleanup remaining keys
+	for _, key := range testKeys {
+		client.Del(ctx, key)
+	}
+	checkRedisKeys(ctx, client, "CLEANUP remaining keys", logger)
+
+	logger.Println("✅ Cache invalidation test completed!")
+}

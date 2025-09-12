@@ -1,6 +1,8 @@
 package tags
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -8,7 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"evently/internal/shared/constants"
+	"evently/pkg/cache"
+
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -37,11 +43,68 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
+	repo        Repository
+	redisClient *redis.Client
 }
 
 func NewService(repo Repository) Service {
-	return &service{repo: repo}
+	return &service{
+		repo:        repo,
+		redisClient: cache.Client(),
+	}
+}
+
+// Cache helper methods
+func (s *service) setCache(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	if s.redisClient == nil {
+		return nil // Skip caching if Redis is not available
+	}
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed to marshal cache data: %w", err)
+	}
+
+	return s.redisClient.Set(ctx, key, data, ttl).Err()
+}
+
+func (s *service) getCache(ctx context.Context, key string, dest interface{}) error {
+	if s.redisClient == nil {
+		return fmt.Errorf("redis client not available")
+	}
+
+	data, err := s.redisClient.Get(ctx, key).Result()
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal([]byte(data), dest)
+}
+
+func (s *service) deleteCache(ctx context.Context, keys ...string) error {
+	if s.redisClient == nil || len(keys) == 0 {
+		return nil
+	}
+
+	return s.redisClient.Del(ctx, keys...).Err()
+}
+
+func (s *service) invalidateTagCache(ctx context.Context) error {
+	if s.redisClient == nil {
+		return nil
+	}
+
+	// Delete all tag-related cache keys
+	keys, err := s.redisClient.Keys(ctx, constants.PATTERN_INVALIDATE_TAGS_ALL).Result()
+	if err != nil {
+		return err
+	}
+
+	if len(keys) > 0 {
+		return s.redisClient.Del(ctx, keys...).Err()
+	}
+
+	return nil
 }
 
 // Helper function to generate slug from name
@@ -115,6 +178,13 @@ func (s *service) CreateTag(adminID uuid.UUID, req CreateTagRequest) (*TagRespon
 		return nil, fmt.Errorf("failed to create tag: %w", err)
 	}
 
+	// Invalidate tag cache after creation
+	ctx := context.Background()
+	if err := s.invalidateTagCache(ctx); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: failed to invalidate tag cache after creation: %v\n", err)
+	}
+
 	response := tag.ToResponse()
 	return &response, nil
 }
@@ -133,6 +203,16 @@ func (s *service) GetTagByID(id uuid.UUID) (*TagResponse, error) {
 }
 
 func (s *service) GetTagBySlug(slug string) (*TagResponse, error) {
+	ctx := context.Background()
+	cacheKey := constants.BuildTagBySlugKey(slug)
+
+	// Try to get from cache first
+	var cachedTag TagResponse
+	if err := s.getCache(ctx, cacheKey, &cachedTag); err == nil {
+		return &cachedTag, nil
+	}
+
+	// Cache miss - get from database
 	tag, err := s.repo.GetBySlug(slug)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -142,6 +222,13 @@ func (s *service) GetTagBySlug(slug string) (*TagResponse, error) {
 	}
 
 	response := tag.ToResponse()
+
+	// Cache the result
+	if err := s.setCache(ctx, cacheKey, response, constants.TTL_TAG_DETAIL); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: failed to cache tag by slug: %v\n", err)
+	}
+
 	return &response, nil
 }
 
@@ -213,6 +300,13 @@ func (s *service) UpdateTag(id uuid.UUID, adminID uuid.UUID, req UpdateTagReques
 		return nil, fmt.Errorf("failed to update tag: %w", err)
 	}
 
+	// Invalidate tag cache after update
+	ctx := context.Background()
+	if err := s.invalidateTagCache(ctx); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: failed to invalidate tag cache after update: %v\n", err)
+	}
+
 	response := updatedTag.ToResponse()
 	return &response, nil
 }
@@ -239,6 +333,13 @@ func (s *service) DeleteTag(id uuid.UUID, adminID uuid.UUID) error {
 
 	if err := s.repo.Delete(id); err != nil {
 		return fmt.Errorf("failed to delete tag: %w", err)
+	}
+
+	// Invalidate tag cache after deletion
+	ctx := context.Background()
+	if err := s.invalidateTagCache(ctx); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: failed to invalidate tag cache after deletion: %v\n", err)
 	}
 
 	return nil
@@ -277,6 +378,16 @@ func (s *service) GetAllTags(query TagListQuery) (*PaginatedTags, error) {
 }
 
 func (s *service) GetActiveTags() ([]TagResponse, error) {
+	ctx := context.Background()
+	cacheKey := constants.CACHE_KEY_TAGS_ACTIVE
+
+	// Try to get from cache first
+	var cachedTags []TagResponse
+	if err := s.getCache(ctx, cacheKey, &cachedTags); err == nil {
+		return cachedTags, nil
+	}
+
+	// Cache miss - get from database
 	tags, err := s.repo.GetActive()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active tags: %w", err)
@@ -285,6 +396,12 @@ func (s *service) GetActiveTags() ([]TagResponse, error) {
 	responses := make([]TagResponse, len(tags))
 	for i, tag := range tags {
 		responses[i] = tag.ToResponse()
+	}
+
+	// Cache the result
+	if err := s.setCache(ctx, cacheKey, responses, constants.TTL_TAGS_ACTIVE); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: failed to cache active tags: %v\n", err)
 	}
 
 	return responses, nil

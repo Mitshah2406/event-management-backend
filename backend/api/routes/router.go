@@ -16,6 +16,7 @@ import (
 	"evently/internal/tags"
 	"evently/internal/venues"
 	"evently/internal/waitlist"
+	"evently/pkg/cache"
 	"log"
 	"net/http"
 	"time"
@@ -60,13 +61,18 @@ type Router struct {
 	cancellationController *cancellation.Controller // For controller recreation when service updates
 	analyticsService       analytics.Service        // For analytics
 	waitlistService        waitlist.Service         // For waitlist operations
+	cacheService           cache.Service            // For caching
 }
 
 // NewRouter creates a new router instance
 func NewRouter(cfg *config.Config, db *database.DB) *Router {
+	// Initialize cache service
+	cacheService := cache.NewService(db.GetRedis())
+
 	return &Router{
-		config: cfg,
-		db:     db,
+		config:       cfg,
+		db:           db,
+		cacheService: cacheService,
 	}
 }
 
@@ -176,6 +182,11 @@ func (r *Router) setupEventRoutes(rg *gin.RouterGroup) {
 	eventRepo := events.NewRepository(r.db.GetPostgreSQL())
 	eventService := events.NewService(eventRepo)
 
+	// Inject cache service dependency
+	if eventService, ok := eventService.(interface{ SetCacheService(cache.Service) }); ok && r.cacheService != nil {
+		eventService.SetCacheService(r.cacheService)
+	}
+
 	// Inject tag service dependency
 	if r.tagService != nil {
 		eventService.SetTagService(r.tagService)
@@ -220,6 +231,12 @@ func (r *Router) setupSeatRoutes(rg *gin.RouterGroup) {
 	// Initialize seat dependencies with Redis support
 	seatRepo := seats.NewRepository(r.db.GetPostgreSQL(), r.db.GetRedis())
 	seatService := seats.NewService(seatRepo, r.config)
+
+	// Inject cache service dependency
+	if seatService, ok := seatService.(interface{ SetCacheService(cache.Service) }); ok && r.cacheService != nil {
+		seatService.SetCacheService(r.cacheService)
+	}
+
 	seatController := seats.NewController(seatService)
 
 	// Setup seat routes
@@ -444,6 +461,12 @@ func (r *Router) setupAnalyticsRoutes(rg *gin.RouterGroup) {
 	// Initialize analytics dependencies
 	analyticsRepo := analytics.NewRepository(r.db.GetPostgreSQL())
 	analyticsService := analytics.NewService(analyticsRepo)
+
+	// Inject cache service dependency
+	if analyticsService, ok := analyticsService.(interface{ SetCacheService(cache.Service) }); ok && r.cacheService != nil {
+		analyticsService.SetCacheService(r.cacheService)
+	}
+
 	analyticsController := analytics.NewController(analyticsService)
 
 	// Store analytics service for dependency injection

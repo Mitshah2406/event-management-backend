@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"evently/internal/shared/config"
+	"evently/internal/shared/constants"
+	"evently/pkg/cache"
 	"evently/pkg/logger"
 
 	"github.com/google/uuid"
@@ -41,8 +43,9 @@ type Service interface {
 
 // service implements Service interface
 type service struct {
-	repo   Repository
-	config *config.Config
+	repo         Repository
+	config       *config.Config
+	cacheService cache.Service
 }
 
 // NewService creates a new seat service
@@ -51,6 +54,11 @@ func NewService(repo Repository, cfg *config.Config) Service {
 		repo:   repo,
 		config: cfg,
 	}
+}
+
+// SetCacheService injects the cache service dependency
+func (s *service) SetCacheService(cacheService cache.Service) {
+	s.cacheService = cacheService
 }
 
 // ============= SEAT MANAGEMENT =============
@@ -398,6 +406,18 @@ func (s *service) GetAvailableSeatsInSectionForEvent(ctx context.Context, sectio
 		return nil, fmt.Errorf("invalid event ID: %w", err)
 	}
 
+	// Try to get from cache first
+	cacheKey := constants.BuildSeatAvailabilityKey(sectionID, eventID)
+	if s.cacheService != nil {
+		var cachedSeats []SeatResponse
+		if err := s.cacheService.Get(ctx, cacheKey, &cachedSeats); err == nil {
+			logger.GetDefault().Debug("Cache HIT for seat availability:", cacheKey)
+			return cachedSeats, nil
+		} else {
+			logger.GetDefault().Debug("Cache MISS for seat availability:", cacheKey)
+		}
+	}
+
 	// Get all seats in section (not just "available" ones since we need event-specific logic)
 	seats, err := s.repo.GetSeatsBySectionID(ctx, sectionUUID)
 	if err != nil {
@@ -439,6 +459,15 @@ func (s *service) GetAvailableSeatsInSectionForEvent(ctx context.Context, sectio
 				Price:      0, // Will be calculated with section multiplier
 				IsHeld:     isHeld,
 			})
+		}
+	}
+
+	// Cache the result
+	if s.cacheService != nil {
+		if err := s.cacheService.Set(ctx, cacheKey, response, constants.TTL_SEATS_AVAILABLE); err != nil {
+			logger.GetDefault().Debug("Warning: failed to cache seat availability:", err)
+		} else {
+			logger.GetDefault().Debug("Cached seat availability:", cacheKey)
 		}
 	}
 

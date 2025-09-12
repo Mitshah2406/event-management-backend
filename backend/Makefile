@@ -1,5 +1,6 @@
 .PHONY: db-info build run dev setup test clean docker-up docker-down help
 
+
 # Build the application
 db-info: ## Show database connection info
 	@echo "PostgreSQL (Beekeeper Studio):"

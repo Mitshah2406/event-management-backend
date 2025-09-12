@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"evently/internal/shared/constants"
+	"evently/pkg/cache"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -18,6 +21,7 @@ type Service interface {
 	// Service dependency injection
 	SetTagService(tagService TagService)
 	SetVenueService(venueService VenueService)
+	SetCacheService(cacheService cache.Service)
 	CreateEvent(userID uuid.UUID, req CreateEventRequest) (*EventResponse, error)
 	GetEventByID(id uuid.UUID) (*EventResponse, error)
 	// Original methods for backward compatibility
@@ -41,6 +45,7 @@ type service struct {
 	repo         Repository
 	tagService   TagService
 	venueService VenueService
+	cacheService cache.Service
 }
 
 // TagService interface to avoid circular dependencies
@@ -57,7 +62,9 @@ type VenueService interface {
 }
 
 func NewService(repo Repository) Service {
-	return &service{repo: repo}
+	return &service{
+		repo: repo,
+	}
 }
 
 func (s *service) SetTagService(tagService TagService) {
@@ -66,6 +73,66 @@ func (s *service) SetTagService(tagService TagService) {
 
 func (s *service) SetVenueService(venueService VenueService) {
 	s.venueService = venueService
+}
+
+// SetCacheService injects the cache service dependency
+func (s *service) SetCacheService(cacheService cache.Service) {
+	s.cacheService = cacheService
+}
+
+// Cache helper methods
+func (s *service) setCache(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	if s.cacheService == nil {
+		return nil // Skip caching if cache service is not available
+	}
+
+	return s.cacheService.Set(ctx, key, value, ttl)
+}
+
+func (s *service) getCache(ctx context.Context, key string, dest interface{}) error {
+	if s.cacheService == nil {
+		return fmt.Errorf("cache service not available")
+	}
+
+	return s.cacheService.Get(ctx, key, dest)
+}
+
+func (s *service) deleteCache(ctx context.Context, keys ...string) error {
+	if s.cacheService == nil || len(keys) == 0 {
+		return nil
+	}
+
+	for _, key := range keys {
+		if err := s.cacheService.Delete(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *service) invalidateEventCache(ctx context.Context, eventID *uuid.UUID) error {
+	if s.cacheService == nil {
+		return nil
+	}
+
+	// Build patterns for cache invalidation
+	patterns := []string{
+		constants.PATTERN_INVALIDATE_EVENT_ALL,
+	}
+
+	// If specific event ID provided, also invalidate its specific caches
+	if eventID != nil {
+		patterns = append(patterns, constants.PATTERN_INVALIDATE_EVENT_DETAIL+eventID.String()+"*")
+	}
+
+	// Delete matching keys using pattern
+	for _, pattern := range patterns {
+		if err := s.cacheService.DeletePattern(ctx, pattern); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Helper function to populate tags in event response
@@ -201,7 +268,7 @@ func (s *service) validateSectionsExist(venueTemplateID uuid.UUID, sectionPricin
 	validSectionIDs := make(map[string]bool)
 	for i := 0; i < sectionsValue.Len(); i++ {
 		section := sectionsValue.Index(i)
-		
+
 		// Try to get the ID field using reflection
 		if section.Kind() == reflect.Struct {
 			idField := section.FieldByName("ID")
@@ -311,10 +378,27 @@ func (s *service) CreateEvent(userID uuid.UUID, req CreateEventRequest) (*EventR
 		return nil, fmt.Errorf("failed to populate tags: %w", err)
 	}
 
+	// Invalidate event cache after creation
+	ctx := context.Background()
+	if err := s.invalidateEventCache(ctx, nil); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: failed to invalidate event cache after creation: %v\n", err)
+	}
+
 	return &response, nil
 }
 
 func (s *service) GetEventByID(id uuid.UUID) (*EventResponse, error) {
+	ctx := context.Background()
+	cacheKey := constants.BuildEventDetailKey(id.String())
+
+	// Try to get from cache first
+	var cachedEvent EventResponse
+	if err := s.getCache(ctx, cacheKey, &cachedEvent); err == nil {
+		return &cachedEvent, nil
+	}
+
+	// Cache miss - get from database
 	event, err := s.repo.GetByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -333,6 +417,12 @@ func (s *service) GetEventByID(id uuid.UUID) (*EventResponse, error) {
 	// Populate tags in response
 	if err := s.populateEventTags(&response); err != nil {
 		return nil, fmt.Errorf("failed to populate tags: %w", err)
+	}
+
+	// Cache the result
+	if err := s.setCache(ctx, cacheKey, response, constants.TTL_EVENT_DETAIL); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: failed to cache event detail: %v\n", err)
 	}
 
 	return &response, nil
@@ -422,6 +512,13 @@ func (s *service) UpdateEvent(id uuid.UUID, userID uuid.UUID, req UpdateEventReq
 		return nil, fmt.Errorf("failed to populate tags: %w", err)
 	}
 
+	// Invalidate event cache after update
+	ctx := context.Background()
+	if err := s.invalidateEventCache(ctx, &id); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: failed to invalidate event cache after update: %v\n", err)
+	}
+
 	return &response, nil
 }
 
@@ -470,6 +567,19 @@ func (s *service) GetAllEvents(query EventListQuery) (*PaginatedEvents, error) {
 		query.Limit = 10
 	}
 
+	ctx := context.Background()
+	cacheKey := constants.BuildEventListKey(query.Page, query.Limit, query.Status)
+
+	// Try to get from cache first
+	var cachedResult PaginatedEvents
+	if err := s.getCache(ctx, cacheKey, &cachedResult); err == nil {
+		log.Printf("Cache HIT for event list: %s", cacheKey)
+		return &cachedResult, nil
+	} else {
+		log.Printf("Cache MISS for event list: %s (error: %v)", cacheKey, err)
+	}
+
+	// Cache miss - get from database
 	events, totalCount, err := s.repo.GetAll(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events: %w", err)
@@ -479,12 +589,12 @@ func (s *service) GetAllEvents(query EventListQuery) (*PaginatedEvents, error) {
 	eventResponses := make([]EventResponse, len(events))
 	for i, event := range events {
 		response := event.ToResponse()
-		
+
 		// Populate capacity data for each event
 		if err := s.populateEventCapacity(&response); err != nil {
 			// Log error but don't fail the entire request
 		}
-		
+
 		// Populate tags for each event
 		if err := s.populateEventTags(&response); err != nil {
 			// Log error but don't fail the entire request
@@ -496,13 +606,23 @@ func (s *service) GetAllEvents(query EventListQuery) (*PaginatedEvents, error) {
 	// Calculate total pages
 	totalPages := int(math.Ceil(float64(totalCount) / float64(query.Limit)))
 
-	return &PaginatedEvents{
+	result := &PaginatedEvents{
 		Events:     eventResponses,
 		TotalCount: totalCount,
 		Page:       query.Page,
 		Limit:      query.Limit,
 		TotalPages: totalPages,
-	}, nil
+	}
+
+	// Cache the result
+	if err := s.setCache(ctx, cacheKey, result, constants.TTL_EVENT_LIST); err != nil {
+		// Log error but don't fail the request
+		log.Printf("Warning: failed to cache event list: %v", err)
+	} else {
+		log.Printf("Cached event list: %s", cacheKey)
+	}
+
+	return result, nil
 }
 
 func (s *service) GetEventAnalytics(eventID uuid.UUID, userID uuid.UUID) (*EventAnalytics, error) {
@@ -536,6 +656,19 @@ func (s *service) GetUpcomingEvents(limit int) ([]EventResponse, error) {
 		limit = 100
 	}
 
+	ctx := context.Background()
+	cacheKey := constants.CACHE_KEY_EVENTS_UPCOMING + ":limit:" + fmt.Sprintf("%d", limit)
+
+	// Try to get from cache first
+	var cachedResult []EventResponse
+	if err := s.getCache(ctx, cacheKey, &cachedResult); err == nil {
+		log.Printf("Cache HIT for upcoming events: %s", cacheKey)
+		return cachedResult, nil
+	} else {
+		log.Printf("Cache MISS for upcoming events: %s (error: %v)", cacheKey, err)
+	}
+
+	// Cache miss - get from database
 	events, err := s.repo.GetUpcomingEvents(limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get upcoming events: %w", err)
@@ -544,17 +677,25 @@ func (s *service) GetUpcomingEvents(limit int) ([]EventResponse, error) {
 	responses := make([]EventResponse, len(events))
 	for i, event := range events {
 		response := event.ToResponse()
-		
+
 		// Populate capacity data for each event
 		if err := s.populateEventCapacity(&response); err != nil {
 			// Log error but don't fail the entire request
 		}
-		
+
 		// Populate tags for each event
 		if err := s.populateEventTags(&response); err != nil {
 			// Log error but don't fail the entire request
 		}
 		responses[i] = response
+	}
+
+	// Cache the result
+	if err := s.setCache(ctx, cacheKey, responses, constants.TTL_EVENT_UPCOMING); err != nil {
+		// Log error but don't fail the request
+		log.Printf("Warning: failed to cache upcoming events: %v", err)
+	} else {
+		log.Printf("Cached upcoming events: %s", cacheKey)
 	}
 
 	return responses, nil
@@ -593,12 +734,12 @@ func (s *service) GetEventCapacityData(eventID uuid.UUID) (totalCapacity, booked
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to get event capacity data: %w", err)
 	}
-	
+
 	availableSeats = totalCapacity - bookedCount
 	if availableSeats < 0 {
 		availableSeats = 0
 	}
-	
+
 	return totalCapacity, bookedCount, availableSeats, nil
 }
 

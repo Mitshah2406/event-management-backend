@@ -1,8 +1,12 @@
 package analytics
 
 import (
+	"context"
 	"fmt"
 	"time"
+
+	"evently/internal/shared/constants"
+	"evently/pkg/cache"
 
 	"github.com/google/uuid"
 )
@@ -39,7 +43,8 @@ type Service interface {
 
 // service implements the Service interface
 type service struct {
-	repo Repository
+	repo         Repository
+	cacheService cache.Service
 }
 
 // NewService creates a new analytics service instance
@@ -47,12 +52,37 @@ func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
+// SetCacheService injects the cache service dependency
+func (s *service) SetCacheService(cacheService cache.Service) {
+	s.cacheService = cacheService
+}
+
 // Dashboard Analytics Implementation
 
 func (s *service) GetDashboardAnalytics() (*DashboardAnalytics, error) {
+	ctx := context.Background()
+	cacheKey := constants.CACHE_KEY_ANALYTICS_DASHBOARD
+
+	// Try to get from cache first
+	if s.cacheService != nil {
+		var cachedDashboard DashboardAnalytics
+		if err := s.cacheService.Get(ctx, cacheKey, &cachedDashboard); err == nil {
+			return &cachedDashboard, nil
+		}
+	}
+
+	// Cache miss - get from repository
 	dashboard, err := s.repo.GetDashboardAnalytics()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dashboard analytics: %w", err)
+	}
+
+	// Cache the result
+	if s.cacheService != nil {
+		if err := s.cacheService.Set(ctx, cacheKey, dashboard, constants.TTL_ANALYTICS_DASHBOARD); err != nil {
+			// Log error but don't fail the request
+			fmt.Printf("Warning: failed to cache dashboard analytics: %v\n", err)
+		}
 	}
 
 	return dashboard, nil
@@ -61,6 +91,18 @@ func (s *service) GetDashboardAnalytics() (*DashboardAnalytics, error) {
 // Event Analytics Implementation
 
 func (s *service) GetEventAnalytics(eventID uuid.UUID) (*EventAnalytics, error) {
+	ctx := context.Background()
+	cacheKey := constants.BuildAnalyticsEventKey(eventID.String())
+
+	// Try to get from cache first
+	if s.cacheService != nil {
+		var cachedAnalytics EventAnalytics
+		if err := s.cacheService.Get(ctx, cacheKey, &cachedAnalytics); err == nil {
+			return &cachedAnalytics, nil
+		}
+	}
+
+	// Cache miss - get from repository
 	analytics, err := s.repo.GetEventAnalytics(eventID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get event analytics: %w", err)
@@ -68,6 +110,14 @@ func (s *service) GetEventAnalytics(eventID uuid.UUID) (*EventAnalytics, error) 
 
 	// Add business logic processing here if needed
 	// For example, calculating additional metrics, applying business rules, etc.
+
+	// Cache the result
+	if s.cacheService != nil {
+		if err := s.cacheService.Set(ctx, cacheKey, analytics, constants.TTL_ANALYTICS_EVENT); err != nil {
+			// Log error but don't fail the request
+			fmt.Printf("Warning: failed to cache event analytics: %v\n", err)
+		}
+	}
 
 	return analytics, nil
 }
