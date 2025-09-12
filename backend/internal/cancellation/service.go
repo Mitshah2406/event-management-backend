@@ -31,12 +31,18 @@ type BookingService interface {
 	CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error
 }
 
+// WaitlistService interface for waitlist operations (to avoid circular dependency)
+type WaitlistService interface {
+	ProcessCancellation(ctx context.Context, eventID uuid.UUID, freedTickets int) error
+}
+
 // BookingInfo represents booking information for cancellation calculations
 type BookingInfo struct {
 	ID         uuid.UUID `json:"id"`
 	UserID     uuid.UUID `json:"user_id"`
 	EventID    uuid.UUID `json:"event_id"`
 	TotalPrice float64   `json:"total_price"`
+	TotalSeats int       `json:"total_seats"`
 	Status     string    `json:"status"`
 	BookingRef string    `json:"booking_ref"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -58,15 +64,17 @@ type CancellationRequest struct {
 
 // service implements the Service interface
 type service struct {
-	repo           Repository
-	bookingService BookingService
+	repo            Repository
+	bookingService  BookingService
+	waitlistService WaitlistService
 }
 
 // NewService creates a new cancellation service instance
-func NewService(repo Repository, bookingService BookingService) Service {
+func NewService(repo Repository, bookingService BookingService, waitlistService WaitlistService) Service {
 	return &service{
-		repo:           repo,
-		bookingService: bookingService,
+		repo:            repo,
+		bookingService:  bookingService,
+		waitlistService: waitlistService,
 	}
 }
 
@@ -185,6 +193,23 @@ func (s *service) RequestCancellation(ctx context.Context, bookingID uuid.UUID, 
 		// TODO: Add proper logging here
 		return cancellation, fmt.Errorf("cancellation created but failed to update booking status: %w", err)
 	}
+
+	// Notify waitlist users about freed seats (run in background to avoid blocking)
+	go func() {
+		if s.waitlistService != nil {
+			// Log the notification attempt
+			fmt.Printf("🔔 NOTIFICATION DISPATCH: Starting waitlist notification for booking %s (event: %s, seats: %d)\n",
+				bookingID, booking.EventID, booking.TotalSeats)
+
+			if err := s.waitlistService.ProcessCancellation(context.Background(), booking.EventID, booking.TotalSeats); err != nil {
+				fmt.Printf("❌ NOTIFICATION FAILED: Event %s - Error: %v\n", booking.EventID, err)
+			} else {
+				fmt.Printf("✅ NOTIFICATION SUCCESS: Event %s - %d seats freed and waitlist notified\n", booking.EventID, booking.TotalSeats)
+			}
+		} else {
+			fmt.Printf("⚠️  NOTIFICATION SKIPPED: Waitlist service not available for booking %s\n", bookingID)
+		}
+	}()
 
 	return cancellation, nil
 }

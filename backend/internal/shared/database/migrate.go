@@ -8,6 +8,7 @@ import (
 	"evently/internal/tags"
 	"evently/internal/users"
 	"evently/internal/venues"
+	"evently/internal/waitlist"
 
 	"gorm.io/gorm"
 )
@@ -41,5 +42,10 @@ func Migrate(db *gorm.DB) error {
 		// Cancellation policies and cancellations
 		&cancellation.CancellationPolicy{},
 		&cancellation.Cancellation{},
+
+		// Waitlist tables
+		&waitlist.WaitlistEntry{},
+		&waitlist.WaitlistNotification{},
+		&waitlist.WaitlistAnalytics{},
 	)
 }

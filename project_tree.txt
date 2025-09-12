@@ -5,6 +5,8 @@
 │   │   ├── middleware
 │   │   └── routes
 │   │       └── router.go
+│   ├── bin
+│   │   └── server
 │   ├── cmd
 │   ├── configs
 │   ├── deployments
@@ -16,10 +18,16 @@
 │   │   │   └── init.sql
 │   │   └── k8s
 │   ├── docs
+│   ├── emailtest.go
 │   ├── go.mod
 │   ├── go.sum
 │   ├── internal
 │   │   ├── analytics
+│   │   │   ├── controller.go
+│   │   │   ├── models.go
+│   │   │   ├── repository.go
+│   │   │   ├── router.go
+│   │   │   └── service.go
 │   │   ├── auth
 │   │   │   ├── controller.go
 │   │   │   ├── models.go
@@ -46,6 +54,14 @@
 │   │   │   ├── router.go
 │   │   │   ├── service.go
 │   │   │   └── status.go
+│   │   ├── notifications
+│   │   │   ├── consumer.go
+│   │   │   ├── email_service.go
+│   │   │   ├── models.go
+│   │   │   ├── producer.go
+│   │   │   ├── service.go
+│   │   │   ├── services.go
+│   │   │   └── waitlist_service_adapter.go
 │   │   ├── seats
 │   │   │   ├── controller.go
 │   │   │   ├── models.go
@@ -73,12 +89,20 @@
 │   │   ├── users
 │   │   │   ├── models.go
 │   │   │   └── roles.go
-│   │   └── venues
+│   │   ├── venues
+│   │   │   ├── controller.go
+│   │   │   ├── models.go
+│   │   │   ├── repository.go
+│   │   │   ├── router.go
+│   │   │   └── service.go
+│   │   └── waitlist
 │   │       ├── controller.go
+│   │       ├── jobs.go
 │   │       ├── models.go
 │   │       ├── repository.go
 │   │       ├── router.go
 │   │       └── service.go
+│   ├── main
 │   ├── Makefile
 │   ├── pkg
 │   │   ├── cache
@@ -97,4 +121,4 @@
 ├── Evently-Task.txt
 └── project_tree.txt
 
-34 directories, 64 files
+37 directories, 85 files

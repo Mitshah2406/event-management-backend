@@ -1,0 +1,79 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+
+	"evently/internal/notifications"
+
+	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+)
+
+func main() {
+	// Load environment variables from .env file
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: Could not load .env file: %v", err)
+	}
+
+	// Debug: Check if environment variables are set
+	fmt.Printf("🔍 Environment Variables Check:\n")
+	fmt.Printf("  SMTP_HOST: '%s'\n", os.Getenv("SMTP_HOST"))
+	fmt.Printf("  SMTP_USERNAME: '%s'\n", os.Getenv("SMTP_USERNAME"))
+	fmt.Printf("  FROM_EMAIL: '%s'\n", os.Getenv("FROM_EMAIL"))
+
+	// Create SMTP config and debug its values
+	config := notifications.NewSMTPConfigFromEnv()
+
+	// Debug configuration
+	fmt.Printf("🔍 SMTP Config Debug:\n")
+	fmt.Printf("  Host: '%s'\n", config.Host)
+	fmt.Printf("  Port: %d\n", config.Port)
+	fmt.Printf("  Username: '%s'\n", config.Username)
+	fmt.Printf("  Password: '%s' (length: %d)\n", "***", len(config.Password))
+	fmt.Printf("  FromEmail: '%s'\n", config.FromEmail)
+	fmt.Printf("  FromName: '%s'\n", config.FromName)
+	fmt.Printf("  UseTLS: %v\n", config.UseTLS)
+	fmt.Printf("  Timeout: %v\n", config.Timeout)
+
+	// Validate required fields
+	if config.Host == "" {
+		log.Fatal("❌ SMTP_HOST is empty or not set")
+	}
+	if config.Username == "" {
+		log.Fatal("❌ SMTP_USERNAME is empty or not set")
+	}
+	if config.Password == "" {
+		log.Fatal("❌ SMTP_PASSWORD is empty or not set")
+	}
+	if config.FromEmail == "" {
+		log.Fatal("❌ FROM_EMAIL is empty or not set")
+	}
+
+	// Create real SMTP email service
+	emailService := notifications.NewSMTPEmailService(config)
+
+	// Create a test notification
+	notification := notifications.NewNotificationBuilder().
+		WithType(notifications.NotificationTypeBookingConfirmed).
+		WithRecipient(uuid.New(), "mitshah2406@gmail.com", "Test User").
+		WithSubject("Test Email - Booking Confirmation").
+		WithTemplate("", map[string]interface{}{
+			"event_title":    "Test Event",
+			"booking_number": "BK-123456",
+			"quantity":       2,
+			"total_amount":   99.99,
+		}).
+		Build()
+
+	// Send the notification
+	ctx := context.Background()
+	err := emailService.SendNotification(ctx, notification)
+	if err != nil {
+		log.Fatalf("Failed to send email: %v", err)
+	}
+
+	log.Println("Email test completed successfully!")
+}

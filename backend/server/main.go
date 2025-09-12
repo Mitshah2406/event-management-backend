@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"evently/api/routes"
+	"evently/internal/notifications"
 	"evently/internal/shared/config"
 	"evently/internal/shared/database"
 	"evently/pkg/cache"
@@ -57,6 +58,34 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 	defer db.Close()
+
+	// Initialize Unified Notification Service
+	notificationCtx, notificationCancel := context.WithCancel(context.Background())
+	defer notificationCancel()
+
+	// Create unified notification service
+	notificationService, err := notifications.NewUnifiedNotificationService(nil) // Uses env config by default
+	if err != nil {
+		log.Printf("⚠️  Failed to initialize notification service: %v", err)
+		log.Println("⚠️  Continuing without notification service - notifications will not be processed")
+	} else {
+		// Start the unified notification service
+		go func() {
+			if err := notificationService.Start(notificationCtx); err != nil {
+				log.Printf("❌ Failed to start notification service: %v", err)
+			}
+		}()
+
+		log.Println("✅ Unified notification service initialized and started")
+
+		// Ensure notification service is stopped on shutdown
+		defer func() {
+			log.Println("Stopping notification service...")
+			if err := notificationService.Stop(); err != nil {
+				log.Printf("Error stopping notification service: %v", err)
+			}
+		}()
+	}
 
 	// Setup router
 	router := setupRouter(cfg, db)

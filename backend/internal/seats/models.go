@@ -69,7 +69,7 @@ func (s *Seat) IsBookedForEvent(eventID uuid.UUID, seatBookings []SeatBooking) b
 	if s.IsBlocked() {
 		return false // Blocked seats can't be booked
 	}
-	
+
 	for _, booking := range seatBookings {
 		if booking.SeatID == s.ID {
 			return true
@@ -83,22 +83,22 @@ func (s *Seat) GetEffectiveStatus(eventID uuid.UUID, seatBookings []SeatBooking,
 	if s.IsBlocked() {
 		return "BLOCKED"
 	}
-	
+
 	if isHeld {
 		return "HELD"
 	}
-	
+
 	if s.IsBookedForEvent(eventID, seatBookings) {
 		return "BOOKED"
 	}
-	
+
 	return "AVAILABLE"
 }
 
 // Convert Seat to SeatResponse with event-specific status
 func (s *Seat) ToResponse(eventID uuid.UUID, price float64, isHeld bool, seatBookings []SeatBooking) SeatResponse {
 	effectiveStatus := s.GetEffectiveStatus(eventID, seatBookings, isHeld)
-	
+
 	return SeatResponse{
 		ID:         s.ID.String(),
 		SeatNumber: s.SeatNumber,
@@ -139,7 +139,7 @@ type BulkUpdateStatusRequest struct {
 // Seat holding models (Your core booking flow)
 type SeatHoldRequest struct {
 	EventID string   `json:"event_id" binding:"required,uuid"`
-	SeatIDs []string `json:"seat_ids" binding:"required,min=1,max=10"`
+	SeatIDs []string `json:"seat_ids" binding:"required,min=1"`
 	UserID  string   `json:"user_id" binding:"required,uuid"`
 }
 

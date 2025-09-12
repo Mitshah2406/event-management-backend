@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"evently/internal/shared/config"
+	"evently/pkg/logger"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -157,9 +158,9 @@ func (s *service) HoldSeats(ctx context.Context, req SeatHoldRequest) (*SeatHold
 	if len(req.SeatIDs) == 0 {
 		return nil, fmt.Errorf("no seats specified")
 	}
-	if len(req.SeatIDs) > 10 {
-		return nil, fmt.Errorf("cannot hold more than 10 seats at once")
-	}
+	// if len(req.SeatIDs) > 10 {
+	// 	return nil, fmt.Errorf("cannot hold more than 10 seats at once")
+	// }
 
 	// Parse seat IDs
 	var seatUUIDs []uuid.UUID
@@ -230,7 +231,7 @@ func (s *service) HoldSeats(ctx context.Context, req SeatHoldRequest) (*SeatHold
 	// Generate hold ID and hold seats in Redis
 	holdID := uuid.New().String()
 	ttl := s.config.Redis.SeatHoldTTL // Use configurable TTL
-
+	logger.GetDefault().Info("Holding seats with hold ID:", holdID, "for user:", req.UserID, "with TTL:", ttl)
 	if err := s.repo.HoldSeats(ctx, seatUUIDs, req.UserID, holdID, req.EventID, ttl); err != nil {
 		return nil, fmt.Errorf("failed to hold seats: %w", err)
 	}
@@ -391,7 +392,7 @@ func (s *service) GetAvailableSeatsInSectionForEvent(ctx context.Context, sectio
 	if err != nil {
 		return nil, fmt.Errorf("invalid section ID: %w", err)
 	}
-
+	logger.GetDefault().Debug("Getting available seats for section:", sectionID, "and event:", eventID)
 	eventUUID, err := uuid.Parse(eventID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid event ID: %w", err)

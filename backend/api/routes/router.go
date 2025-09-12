@@ -3,21 +3,37 @@ package routes
 
 import (
 	"context"
+	"evently/internal/analytics"
 	"evently/internal/auth"
 	"evently/internal/bookings"
 	"evently/internal/cancellation"
 	"evently/internal/events"
+	"evently/internal/notifications"
 	"evently/internal/seats"
 	"evently/internal/shared/config"
 	"evently/internal/shared/database"
+	"evently/internal/shared/middleware"
 	"evently/internal/tags"
 	"evently/internal/venues"
+	"evently/internal/waitlist"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
+
+// nullNotificationAdapter is a no-op notification service for development/testing
+type nullNotificationAdapter struct{}
+
+func (n *nullNotificationAdapter) SendWaitlistNotification(ctx context.Context, userID uuid.UUID, email, name string,
+	eventID, waitlistEntryID uuid.UUID, notificationType string,
+	templateData map[string]interface{}) error {
+	// No-op implementation for development
+	log.Printf("📧 [NULL] Would send %s notification to %s (%s) for event %s", notificationType, email, name, eventID)
+	return nil
+}
 
 // VenueServiceAdapter adapts venues.Service to events.VenueService interface
 type VenueServiceAdapter struct {
@@ -34,13 +50,16 @@ func (v *VenueServiceAdapter) GetSectionsByTemplateID(ctx context.Context, templ
 
 // Router holds all route dependencies
 type Router struct {
-	config              *config.Config
-	db                  *database.DB
-	tagService          tags.Service         // For dependency injection
-	eventService        events.Service       // For dependency injection
-	venueService        venues.Service       // For dependency injection
-	bookingService      bookings.Service     // For dependency injection
-	cancellationService cancellation.Service // For dependency injection
+	config                 *config.Config
+	db                     *database.DB
+	tagService             tags.Service             // For dependency injection
+	eventService           events.Service           // For dependency injection
+	venueService           venues.Service           // For dependency injection
+	bookingService         bookings.Service         // For dependency injection
+	cancellationService    cancellation.Service     // For dependency injection
+	cancellationController *cancellation.Controller // For controller recreation when service updates
+	analyticsService       analytics.Service        // For analytics
+	waitlistService        waitlist.Service         // For waitlist operations
 }
 
 // NewRouter creates a new router instance
@@ -79,6 +98,12 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 
 		// Setup cancellation routes
 		r.setupCancellationRoutes(api)
+
+		// Setup analytics routes
+		r.setupAnalyticsRoutes(api)
+
+		// Setup waitlist routes
+		r.setupWaitlistRoutes(api)
 	}
 }
 
@@ -233,14 +258,16 @@ func (r *Router) setupCancellationRoutes(rg *gin.RouterGroup) {
 		bookingServiceAdapter = &BookingServiceAdapter{bookingService: r.bookingService}
 	}
 
-	cancellationService := cancellation.NewService(cancellationRepo, bookingServiceAdapter)
+	// Initialize without waitlist service (will be injected later)
+	cancellationService := cancellation.NewService(cancellationRepo, bookingServiceAdapter, nil)
 	cancellationController := cancellation.NewController(cancellationService)
 
-	// Store cancellation service for dependency injection
+	// Store cancellation service and controller for dependency injection
 	r.cancellationService = cancellationService
+	r.cancellationController = cancellationController
 
-	// Setup cancellation routes
-	cancellation.SetupCancellationRoutes(rg, cancellationController)
+	// Setup cancellation routes with wrapper functions that use current controller
+	r.setupCancellationRoutesWithWrappers(rg)
 }
 
 // BookingServiceAdapter adapts bookings.Service to cancellation.BookingService interface
@@ -260,6 +287,7 @@ func (b *BookingServiceAdapter) GetBooking(ctx context.Context, bookingID uuid.U
 		UserID:     booking.UserID,
 		EventID:    booking.EventID,
 		TotalPrice: booking.TotalPrice,
+		TotalSeats: booking.TotalSeats,
 		Status:     booking.Status,
 		BookingRef: booking.BookingRef,
 		CreatedAt:  booking.CreatedAt,
@@ -268,6 +296,15 @@ func (b *BookingServiceAdapter) GetBooking(ctx context.Context, bookingID uuid.U
 
 func (b *BookingServiceAdapter) CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error {
 	return b.bookingService.CancelBookingInternal(ctx, bookingID)
+}
+
+// WaitlistServiceAdapter adapts waitlist.Service to cancellation.WaitlistService interface
+type WaitlistServiceAdapter struct {
+	waitlistService waitlist.Service
+}
+
+func (w *WaitlistServiceAdapter) ProcessCancellation(ctx context.Context, eventID uuid.UUID, freedTickets int) error {
+	return w.waitlistService.ProcessCancellation(ctx, eventID, freedTickets)
 }
 
 // SeatServiceAdapter adapts seats.Service to bookings.SeatService interface
@@ -352,4 +389,116 @@ func (s *SeatServiceAdapter) GetHoldDetails(ctx context.Context, holdID string) 
 
 func (s *SeatServiceAdapter) UpdateSeatStatusToBulk(ctx context.Context, seatIDs []uuid.UUID, status string) error {
 	return s.seatService.UpdateSeatStatusToBulk(ctx, seatIDs, status)
+}
+
+// setupAnalyticsRoutes configures analytics routes
+func (r *Router) setupAnalyticsRoutes(rg *gin.RouterGroup) {
+	// Initialize analytics dependencies
+	analyticsRepo := analytics.NewRepository(r.db.GetPostgreSQL())
+	analyticsService := analytics.NewService(analyticsRepo)
+	analyticsController := analytics.NewController(analyticsService)
+
+	// Store analytics service for dependency injection
+	r.analyticsService = analyticsService
+
+	// Setup analytics routes
+	analytics.SetupAnalyticsRoutes(rg, analyticsController)
+}
+
+// setupWaitlistRoutes configures waitlist routes
+func (r *Router) setupWaitlistRoutes(rg *gin.RouterGroup) {
+	// Initialize waitlist dependencies
+	waitlistRepo := waitlist.NewRepository(r.db.GetPostgreSQL(), r.db.GetRedis())
+
+	// Create unified notification service and adapter
+	unifiedNotificationService, err := notifications.NewUnifiedNotificationService(nil)
+	if err != nil {
+		// For now, we'll continue without notifications in case of error
+		// In production, you might want to fail here
+		log.Printf("⚠️ Failed to initialize notification service for waitlist: %v", err)
+	}
+
+	// Create adapter that implements waitlist.NotificationService interface
+	var notificationAdapter waitlist.NotificationService
+	if unifiedNotificationService != nil {
+		notificationAdapter = notifications.NewWaitlistServiceAdapter(unifiedNotificationService)
+	} else {
+		// Use a null adapter for development if unified service fails
+		notificationAdapter = &nullNotificationAdapter{}
+	}
+
+	// Create waitlist service with notification service adapter
+	waitlistService := waitlist.NewService(waitlistRepo, notificationAdapter, nil)
+	waitlistController := waitlist.NewController(waitlistService)
+
+	// Store waitlist service for dependency injection
+	r.waitlistService = waitlistService
+
+	// Update cancellation service with waitlist service dependency (if cancellation service exists)
+	if r.cancellationService != nil {
+		// Create waitlist service adapter for cancellation service
+		waitlistAdapter := &WaitlistServiceAdapter{waitlistService: waitlistService}
+
+		// Re-create cancellation service with waitlist dependency
+		cancellationRepo := cancellation.NewRepository(r.db.GetPostgreSQL())
+		var bookingServiceAdapter cancellation.BookingService
+		if r.bookingService != nil {
+			bookingServiceAdapter = &BookingServiceAdapter{bookingService: r.bookingService}
+		}
+
+		// Update the cancellation service with waitlist integration
+		r.cancellationService = cancellation.NewService(cancellationRepo, bookingServiceAdapter, waitlistAdapter)
+
+		// Recreate the controller with the updated service
+		r.cancellationController = cancellation.NewController(r.cancellationService)
+	}
+
+	// Setup waitlist routes using the same pattern as other modules
+	waitlist.SetupWaitlistRoutes(rg, waitlistController)
+}
+
+// setupCancellationRoutesWithWrappers sets up cancellation routes using wrapper functions
+// that delegate to the current controller instance, allowing for dynamic service updates
+func (r *Router) setupCancellationRoutesWithWrappers(rg *gin.RouterGroup) {
+	// Event cancellation policy routes (Admin only)
+	events := rg.Group("/admin/events")
+	events.Use(middleware.JWTAuth(), middleware.RequireRoles("ADMIN"))
+	{
+		events.POST("/:eventId/cancellation-policy", func(c *gin.Context) {
+			r.cancellationController.CreateCancellationPolicy(c)
+		})
+		events.GET("/:eventId/cancellation-policy", func(c *gin.Context) {
+			r.cancellationController.GetCancellationPolicy(c)
+		})
+		events.PUT("/:eventId/cancellation-policy", func(c *gin.Context) {
+			r.cancellationController.UpdateCancellationPolicy(c)
+		})
+	}
+
+	// Booking cancellation routes (Users and Admins)
+	bookings := rg.Group("/bookings")
+	bookings.Use(middleware.JWTAuth(), middleware.RequireRoles("USER", "ADMIN"))
+	{
+		bookings.POST("/:id/request-cancel", func(c *gin.Context) {
+			r.cancellationController.RequestCancellation(c)
+		})
+	}
+
+	// Cancellation management routes
+	cancellations := rg.Group("/cancellations")
+	cancellations.Use(middleware.JWTAuth(), middleware.RequireRoles("USER", "ADMIN"))
+	{
+		cancellations.GET("/:id", func(c *gin.Context) {
+			r.cancellationController.GetCancellation(c)
+		})
+	}
+
+	// User-specific cancellation routes
+	users := rg.Group("/users")
+	users.Use(middleware.JWTAuth(), middleware.RequireRoles("USER", "ADMIN"))
+	{
+		users.GET("/cancellations", func(c *gin.Context) {
+			r.cancellationController.GetUserCancellations(c)
+		})
+	}
 }
