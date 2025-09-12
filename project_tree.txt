@@ -6,7 +6,8 @@
 │   │   └── routes
 │   │       └── router.go
 │   ├── bin
-│   │   └── server
+│   │   ├── server
+│   │   └── test-build
 │   ├── cmd
 │   ├── configs
 │   ├── deployments
@@ -33,7 +34,8 @@
 │   │   │   ├── models.go
 │   │   │   ├── repository.go
 │   │   │   ├── router.go
-│   │   │   └── service.go
+│   │   │   ├── service.go
+│   │   │   └── user_service_adapter.go
 │   │   ├── bookings
 │   │   │   ├── controller.go
 │   │   │   ├── models.go
@@ -121,4 +123,4 @@
 ├── Evently-Task.txt
 └── project_tree.txt
 
-37 directories, 85 files
+37 directories, 87 files

@@ -16,6 +16,11 @@ type NotificationService interface {
 		templateData map[string]interface{}) error
 }
 
+// UserService defines the interface for fetching user details (to avoid import cycles)
+type UserService interface {
+	GetUserByID(ctx context.Context, userID uuid.UUID) (email, firstName, lastName string, err error)
+}
+
 // Service interface defines the contract for waitlist business operations
 type Service interface {
 	// Core waitlist operations
@@ -38,12 +43,17 @@ type Service interface {
 	// Background job operations
 	ProcessExpiredBookingWindows(ctx context.Context) (int, error)
 	UpdateDailyAnalytics(ctx context.Context) error
+
+	// Booking operations
+	MarkAsConverted(ctx context.Context, userID, eventID, bookingID uuid.UUID) error
+	GetWaitlistStatusForBooking(ctx context.Context, userID, eventID uuid.UUID) (*WaitlistStatusForBooking, error)
 }
 
 // service implements the Service interface
 type service struct {
 	repo                Repository
 	notificationService NotificationService
+	userService         UserService
 	config              *ServiceConfig
 }
 
@@ -66,7 +76,7 @@ func DefaultServiceConfig() *ServiceConfig {
 }
 
 // NewService creates a new waitlist service
-func NewService(repo Repository, notificationService NotificationService, config *ServiceConfig) Service {
+func NewService(repo Repository, notificationService NotificationService, userService UserService, config *ServiceConfig) Service {
 	if config == nil {
 		config = DefaultServiceConfig()
 	}
@@ -74,6 +84,7 @@ func NewService(repo Repository, notificationService NotificationService, config
 	return &service{
 		repo:                repo,
 		notificationService: notificationService,
+		userService:         userService,
 		config:              config,
 	}
 }
@@ -329,10 +340,20 @@ func (s *service) ProcessBookingExpiry(ctx context.Context, userID, eventID uuid
 
 // sendSpotAvailableNotification sends a spot available notification
 func (s *service) sendSpotAvailableNotification(ctx context.Context, entry *WaitlistEntry) error {
-	// TODO: Get user details (email, name) from user service or cache
-	// For now, using placeholder values - you'll need to fetch these from your user service
-	userEmail := "user@example.com" // TODO: Fetch from user service
-	userName := "User"              // TODO: Fetch from user service
+	// Get real user details from user service
+	userEmail, firstName, lastName, err := s.userService.GetUserByID(ctx, entry.UserID)
+	if err != nil {
+		log.Printf("❌ USER FETCH ERROR: Failed to get user details for %s: %v", entry.UserID, err)
+		return fmt.Errorf("failed to get user details: %w", err)
+	}
+
+	userName := firstName
+	if lastName != "" {
+		userName = firstName + " " + lastName
+	}
+	if userName == "" {
+		userName = "User" // Fallback if no name is available
+	}
 
 	// Prepare template data
 	templateData := map[string]interface{}{
@@ -347,7 +368,7 @@ func (s *service) sendSpotAvailableNotification(ctx context.Context, entry *Wait
 
 	// Send via unified notification service
 	log.Printf("� UNIFIED: Sending spot available notification to user %s for event %s", entry.UserID, entry.EventID)
-	err := s.notificationService.SendWaitlistNotification(ctx,
+	notificationErr := s.notificationService.SendWaitlistNotification(ctx,
 		entry.UserID,
 		userEmail,
 		userName,
@@ -356,9 +377,9 @@ func (s *service) sendSpotAvailableNotification(ctx context.Context, entry *Wait
 		"WAITLIST_SPOT_AVAILABLE", // Notification type string
 		templateData,
 	)
-	if err != nil {
-		log.Printf("❌ NOTIFICATION FAILED: Could not send notification for user %s: %v", entry.UserID, err)
-		return fmt.Errorf("failed to send notification: %w", err)
+	if notificationErr != nil {
+		log.Printf("❌ NOTIFICATION FAILED: Could not send notification for user %s: %v", entry.UserID, notificationErr)
+		return fmt.Errorf("failed to send notification: %w", notificationErr)
 	}
 	log.Printf("✅ NOTIFICATION SUCCESS: Spot available notification sent for user %s", entry.UserID)
 
@@ -395,9 +416,20 @@ func (s *service) NotifyPositionUpdate(ctx context.Context, eventID uuid.UUID) e
 
 	// Send individual notifications via unified service
 	for _, entry := range entries {
-		// TODO: Get user details (email, name) from user service
-		userEmail := "user@example.com" // TODO: Fetch from user service
-		userName := "User"              // TODO: Fetch from user service
+		// Get real user details from user service
+		userEmail, firstName, lastName, err := s.userService.GetUserByID(ctx, entry.UserID)
+		if err != nil {
+			log.Printf("❌ USER FETCH ERROR: Failed to get user details for %s: %v", entry.UserID, err)
+			continue // Skip this notification but continue with others
+		}
+
+		userName := firstName
+		if lastName != "" {
+			userName = firstName + " " + lastName
+		}
+		if userName == "" {
+			userName = "User" // Fallback if no name is available
+		}
 
 		templateData := map[string]interface{}{
 			"event_id":    entry.EventID.String(),
@@ -407,7 +439,7 @@ func (s *service) NotifyPositionUpdate(ctx context.Context, eventID uuid.UUID) e
 			"venue_name":  "Venue Name",  // TODO: Fetch from venue service
 		}
 
-		err = s.notificationService.SendWaitlistNotification(ctx,
+		notificationErr := s.notificationService.SendWaitlistNotification(ctx,
 			entry.UserID,
 			userEmail,
 			userName,
@@ -416,8 +448,8 @@ func (s *service) NotifyPositionUpdate(ctx context.Context, eventID uuid.UUID) e
 			"WAITLIST_POSITION_UPDATE", // Notification type string
 			templateData,
 		)
-		if err != nil {
-			log.Printf("❌ Position update failed for user %s: %v", entry.UserID, err)
+		if notificationErr != nil {
+			log.Printf("❌ Position update failed for user %s: %v", entry.UserID, notificationErr)
 			continue // Continue with other notifications even if one fails
 		}
 	}
@@ -447,25 +479,26 @@ func (s *service) ProcessExpiredBookingWindows(ctx context.Context) (int, error)
 		return 0, nil
 	}
 
-	// Update all expired entries
-	var entryIDs []uuid.UUID
-	for _, entry := range expiredEntries {
-		entryIDs = append(entryIDs, entry.ID)
-	}
-
-	err = s.repo.UpdateEntriesStatus(ctx, entryIDs, WaitlistStatusExpired)
-	if err != nil {
-		return 0, fmt.Errorf("failed to update expired entries: %w", err)
-	}
-
-	// Remove from Redis queues and notify next users
+	// Re-queue expired users instead of removing them permanently
 	eventTickets := make(map[uuid.UUID]int)
+	var requeuedUsers []uuid.UUID
+
 	for _, entry := range expiredEntries {
-		s.repo.RemoveFromQueue(ctx, entry.UserID, entry.EventID)
+		// Requeue the user at the end of the waitlist
+		err := s.repo.RequeueExpiredUser(ctx, entry.UserID, entry.EventID)
+		if err != nil {
+			log.Printf("Failed to requeue expired user %s for event %s: %v", entry.UserID, entry.EventID, err)
+			continue
+		}
+
+		log.Printf("🔄 RE-QUEUED: User %s moved back to end of waitlist for event %s (missed booking window)",
+			entry.UserID, entry.EventID)
+
+		requeuedUsers = append(requeuedUsers, entry.UserID)
 		eventTickets[entry.EventID] += entry.Quantity
 	}
 
-	// Notify next users for each event
+	// Notify next users for each event (the tickets are still available)
 	for eventID, freedTickets := range eventTickets {
 		go func(eID uuid.UUID, tickets int) {
 			if err := s.NotifyNextInLine(context.Background(), eID, tickets); err != nil {
@@ -474,7 +507,7 @@ func (s *service) ProcessExpiredBookingWindows(ctx context.Context) (int, error)
 		}(eventID, freedTickets)
 	}
 
-	log.Printf("Processed %d expired booking windows", len(expiredEntries))
+	log.Printf("✅ REQUEUE COMPLETE: Re-queued %d expired users instead of removing them", len(requeuedUsers))
 	return len(expiredEntries), nil
 }
 
@@ -508,4 +541,59 @@ func (s *service) validateJoinRequest(request *JoinWaitlistRequest) error {
 	}
 
 	return nil
+}
+
+// MarkAsConverted marks a waitlist entry as converted after successful booking
+func (s *service) MarkAsConverted(ctx context.Context, userID, eventID, bookingID uuid.UUID) error {
+	// Get the waitlist entry
+	entry, err := s.repo.GetEntry(ctx, userID, eventID)
+	if err != nil {
+		// No waitlist entry found - user wasn't on waitlist, which is fine
+		return nil
+	}
+
+	// Only update if user was notified (allowing conversion)
+	if entry.Status != WaitlistStatusNotified {
+		// User wasn't in notified status, no need to update
+		return nil
+	}
+
+	// Update status to converted
+	entry.Status = WaitlistStatusConverted
+	err = s.repo.UpdateEntry(ctx, entry)
+	if err != nil {
+		return fmt.Errorf("failed to mark waitlist entry as converted: %w", err)
+	}
+
+	// Remove from Redis queue since they've successfully booked
+	err = s.repo.RemoveFromQueue(ctx, userID, eventID)
+	if err != nil {
+		log.Printf("Failed to remove converted user from Redis queue: %v", err)
+		// Don't return error as the main goal (marking as converted) succeeded
+	}
+
+	log.Printf("✅ WAITLIST CONVERTED: User %s successfully booked from waitlist for event %s (booking %s)",
+		userID, eventID, bookingID)
+
+	return nil
+}
+
+// GetWaitlistStatusForBooking returns simplified waitlist status for booking validation
+func (s *service) GetWaitlistStatusForBooking(ctx context.Context, userID, eventID uuid.UUID) (*WaitlistStatusForBooking, error) {
+	entry, err := s.repo.GetEntry(ctx, userID, eventID)
+	if err != nil {
+		// No waitlist entry found
+		return nil, nil
+	}
+
+	return &WaitlistStatusForBooking{
+		Status:    string(entry.Status),
+		IsExpired: entry.IsExpired(),
+	}, nil
+}
+
+// WaitlistStatusForBooking represents simplified waitlist status for booking service
+type WaitlistStatusForBooking struct {
+	Status    string `json:"status"`
+	IsExpired bool   `json:"is_expired"`
 }

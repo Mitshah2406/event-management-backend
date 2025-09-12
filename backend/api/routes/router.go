@@ -236,8 +236,14 @@ func (r *Router) setupBookingRoutes(rg *gin.RouterGroup) {
 	seatService := seats.NewService(seatRepo, r.config)
 	seatServiceAdapter := &SeatServiceAdapter{seatService: seatService}
 
+	// Create waitlist service adapter for booking service
+	var waitlistServiceAdapter bookings.WaitlistService
+	if r.waitlistService != nil {
+		waitlistServiceAdapter = &WaitlistServiceAdapterForBookings{waitlistService: r.waitlistService}
+	}
+
 	// Create booking service
-	bookingService := bookings.NewService(bookingRepo, seatServiceAdapter)
+	bookingService := bookings.NewService(bookingRepo, seatServiceAdapter, waitlistServiceAdapter)
 	bookingController := bookings.NewController(bookingService)
 
 	// Store booking service for dependency injection
@@ -391,6 +397,29 @@ func (s *SeatServiceAdapter) UpdateSeatStatusToBulk(ctx context.Context, seatIDs
 	return s.seatService.UpdateSeatStatusToBulk(ctx, seatIDs, status)
 }
 
+// WaitlistServiceAdapter adapts waitlist.Service to bookings.WaitlistService interface
+type WaitlistServiceAdapterForBookings struct {
+	waitlistService waitlist.Service
+}
+
+func (w *WaitlistServiceAdapterForBookings) GetWaitlistStatusForBooking(ctx context.Context, userID, eventID uuid.UUID) (*bookings.WaitlistStatusForBooking, error) {
+	status, err := w.waitlistService.GetWaitlistStatusForBooking(ctx, userID, eventID)
+	if err != nil {
+		return nil, err
+	}
+	if status == nil {
+		return nil, nil
+	}
+	return &bookings.WaitlistStatusForBooking{
+		Status:    status.Status,
+		IsExpired: status.IsExpired,
+	}, nil
+}
+
+func (w *WaitlistServiceAdapterForBookings) MarkAsConverted(ctx context.Context, userID, eventID, bookingID uuid.UUID) error {
+	return w.waitlistService.MarkAsConverted(ctx, userID, eventID, bookingID)
+}
+
 // setupAnalyticsRoutes configures analytics routes
 func (r *Router) setupAnalyticsRoutes(rg *gin.RouterGroup) {
 	// Initialize analytics dependencies
@@ -427,8 +456,12 @@ func (r *Router) setupWaitlistRoutes(rg *gin.RouterGroup) {
 		notificationAdapter = &nullNotificationAdapter{}
 	}
 
-	// Create waitlist service with notification service adapter
-	waitlistService := waitlist.NewService(waitlistRepo, notificationAdapter, nil)
+	// Create user service adapter for fetching user details
+	authRepo := auth.NewRepository(r.db.GetPostgreSQL())
+	userServiceAdapter := auth.NewUserServiceAdapter(authRepo)
+
+	// Create waitlist service with notification service adapter and user service
+	waitlistService := waitlist.NewService(waitlistRepo, notificationAdapter, userServiceAdapter, nil)
 	waitlistController := waitlist.NewController(waitlistService)
 
 	// Store waitlist service for dependency injection

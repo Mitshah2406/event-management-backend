@@ -201,7 +201,7 @@ func (ws WaitlistStatus) IsValid() bool {
 func (ws WaitlistStatus) CanTransitionTo(target WaitlistStatus) bool {
 	validTransitions := map[WaitlistStatus][]WaitlistStatus{
 		WaitlistStatusActive:    {WaitlistStatusNotified, WaitlistStatusCancelled},
-		WaitlistStatusNotified:  {WaitlistStatusConverted, WaitlistStatusExpired, WaitlistStatusCancelled},
+		WaitlistStatusNotified:  {WaitlistStatusConverted, WaitlistStatusExpired, WaitlistStatusCancelled, WaitlistStatusActive}, // Allow re-queuing
 		WaitlistStatusExpired:   {WaitlistStatusCancelled},
 		WaitlistStatusConverted: {}, // Terminal state
 		WaitlistStatusCancelled: {}, // Terminal state

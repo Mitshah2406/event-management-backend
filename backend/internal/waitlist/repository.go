@@ -41,6 +41,9 @@ type Repository interface {
 	CreateNotification(ctx context.Context, notification *WaitlistNotification) error
 	UpdateNotification(ctx context.Context, notification *WaitlistNotification) error
 	GetPendingNotifications(ctx context.Context, limit int) ([]WaitlistNotification, error)
+
+	// Re-queuing Operations
+	RequeueExpiredUser(ctx context.Context, userID, eventID uuid.UUID) error
 }
 
 // repository implements the Repository interface
@@ -484,4 +487,42 @@ func (r *repository) GetPendingNotifications(ctx context.Context, limit int) ([]
 	}
 
 	return notifications, nil
+}
+
+// RequeueExpiredUser moves an expired user back to the end of the active queue
+func (r *repository) RequeueExpiredUser(ctx context.Context, userID, eventID uuid.UUID) error {
+	// Get current queue length to determine new position
+	queueLength, err := r.GetQueueLength(ctx, eventID)
+	if err != nil {
+		return fmt.Errorf("failed to get queue length: %w", err)
+	}
+
+	// Update the entry to move back to active status at end of queue
+	now := time.Now()
+	err = r.db.WithContext(ctx).
+		Model(&WaitlistEntry{}).
+		Where("user_id = ? AND event_id = ? AND status = ?", userID, eventID, WaitlistStatusNotified).
+		Updates(map[string]interface{}{
+			"status":      WaitlistStatusActive,
+			"position":    queueLength + 1, // Place at end of queue
+			"notified_at": nil,
+			"expires_at":  nil,
+			"updated_at":  now,
+		}).Error
+
+	if err != nil {
+		return fmt.Errorf("failed to requeue expired user: %w", err)
+	}
+
+	// Add back to Redis queue at the end
+	err = r.redis.ZAdd(ctx, GetQueueKey(eventID), redis.Z{
+		Score:  float64(queueLength + 1),
+		Member: userID.String(),
+	}).Err()
+
+	if err != nil {
+		return fmt.Errorf("failed to add user back to Redis queue: %w", err)
+	}
+
+	return nil
 }

@@ -20,6 +20,18 @@ type SeatService interface {
 	UpdateSeatStatusToBulk(ctx context.Context, seatIDs []uuid.UUID, status string) error
 }
 
+// WaitlistService interface for waitlist-related operations (to avoid circular dependency)
+type WaitlistService interface {
+	GetWaitlistStatusForBooking(ctx context.Context, userID, eventID uuid.UUID) (*WaitlistStatusForBooking, error)
+	MarkAsConverted(ctx context.Context, userID, eventID, bookingID uuid.UUID) error
+}
+
+// WaitlistStatusForBooking represents waitlist status (simplified for bookings)
+type WaitlistStatusForBooking struct {
+	Status    string `json:"status"`
+	IsExpired bool   `json:"is_expired"`
+}
+
 // SeatHoldDetails represents hold details (matching seats service structure)
 type SeatHoldDetails struct {
 	HoldID  string   `json:"hold_id"`
@@ -43,8 +55,9 @@ type Service interface {
 
 // service implements the Service interface
 type service struct {
-	repo        Repository
-	seatService SeatService
+	repo            Repository
+	seatService     SeatService
+	waitlistService WaitlistService
 }
 
 // HoldValidationResult represents the result of hold validation
@@ -67,10 +80,11 @@ type SeatInfo struct {
 }
 
 // NewService creates a new booking service instance
-func NewService(repo Repository, seatService SeatService) Service {
+func NewService(repo Repository, seatService SeatService, waitlistService WaitlistService) Service {
 	return &service{
-		repo:        repo,
-		seatService: seatService,
+		repo:            repo,
+		seatService:     seatService,
+		waitlistService: waitlistService,
 	}
 }
 
@@ -96,6 +110,33 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 	if holdDetails.EventID != req.EventID {
 		return nil, fmt.Errorf("event ID mismatch: hold is for event %s but request is for event %s",
 			holdDetails.EventID, req.EventID)
+	}
+
+	// Step 1.7: Validate waitlist eligibility (if applicable)
+	eventIDForWaitlist, err := uuid.Parse(req.EventID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid event ID format: %w", err)
+	}
+
+	if s.waitlistService != nil {
+		waitlistStatus, err := s.waitlistService.GetWaitlistStatusForBooking(ctx, userID, eventIDForWaitlist)
+		if err == nil && waitlistStatus != nil {
+			// User is/was on waitlist - validate their booking eligibility
+			if waitlistStatus.Status == "NOTIFIED" {
+				// Check if still within booking window (not expired)
+				if waitlistStatus.IsExpired {
+					return nil, fmt.Errorf("waitlist booking window has expired - you have been moved back to the queue")
+				}
+			} else if waitlistStatus.Status == "ACTIVE" {
+				// User is on waitlist but not notified yet
+				return nil, fmt.Errorf("you are still on the waitlist and have not been notified yet")
+			} else if waitlistStatus.Status == "EXPIRED" {
+				// User's previous notification expired
+				return nil, fmt.Errorf("your previous booking opportunity has expired - you have been moved back to the queue")
+			}
+			// If status is CONVERTED, allow booking (user already successfully converted)
+		}
+		// If no waitlist entry found, user can book normally (not from waitlist)
 	}
 
 	// Step 2: Get seat information for pricing
@@ -185,13 +226,22 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 		return nil, fmt.Errorf("payment processing failed: %w", err)
 	}
 
-	// Step 10: Release Redis hold
+	// Step 10: Mark waitlist as converted (if booking was from waitlist)
+	if s.waitlistService != nil {
+		if err := s.waitlistService.MarkAsConverted(ctx, userID, eventIDForWaitlist, booking.ID); err != nil {
+			// Log warning but don't fail the booking since payment is processed
+			fmt.Printf("Warning: Failed to mark waitlist as converted for user %s, booking %s: %v\n",
+				userID, booking.ID, err)
+		}
+	}
+
+	// Step 11: Release Redis hold
 	if err := s.seatService.ReleaseHold(ctx, req.HoldID); err != nil {
 		// Log error but don't fail the booking since payment is processed
 		fmt.Printf("Warning: Failed to release hold %s: %v\n", req.HoldID, err)
 	}
 
-	// Step 11: Return confirmation response
+	// Step 12: Return confirmation response
 	response := &BookingConfirmationResponse{
 		BookingID:  booking.ID.String(),
 		BookingRef: booking.BookingRef,
