@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -119,30 +120,59 @@ func (r *repository) RemoveFromQueue(ctx context.Context, userID, eventID uuid.U
 
 	userKey := userID.String()
 
-	// Get user's current position
+	// Check if user exists in queue
 	position := r.redis.ZScore(ctx, queueKey, userKey).Val()
 	if position == 0 {
-		return fmt.Errorf("user not found in waitlist for event %s", eventID)
+		// Check if user actually exists (ZScore returns 0 for both non-existent and position 0)
+		exists := r.redis.ZRank(ctx, queueKey, userKey).Val()
+		if exists == 0 {
+			// Double-check with EXISTS to distinguish between position 0 and non-existent
+			memberExists := false
+			allMembers := r.redis.ZRange(ctx, queueKey, 0, -1).Val()
+			for _, member := range allMembers {
+				if member == userKey {
+					memberExists = true
+					break
+				}
+			}
+			if !memberExists {
+				log.Printf("⚠️ RemoveFromQueue: User %s not found in Redis queue for event %s (already removed or never existed)", userID, eventID)
+				// Don't return error - user might have been removed already or never in queue
+				return nil
+			}
+		}
 	}
 
 	// Remove user from queue
-	err := r.redis.ZRem(ctx, queueKey, userKey).Err()
-	if err != nil {
-		return fmt.Errorf("failed to remove user from queue: %w", err)
+	removed := r.redis.ZRem(ctx, queueKey, userKey).Val()
+	if removed == 0 {
+		log.Printf("⚠️ RemoveFromQueue: User %s was not in Redis queue for event %s", userID, eventID)
+		// Don't return error - user might have been removed already
+	} else {
+		log.Printf("✅ RemoveFromQueue: Successfully removed user %s from Redis queue for event %s", userID, eventID)
 	}
 
-	// Update positions of users behind the removed user
-	err = r.redis.ZIncrBy(ctx, queueKey, -1, userKey).Err()
-	if err == nil { // If the operation succeeded, adjust all positions
-		// Get all members with score greater than the removed user's position
-		members := r.redis.ZRangeByScore(ctx, queueKey, &redis.ZRangeBy{
-			Min: fmt.Sprintf("(%f", position),
-			Max: "+inf",
-		}).Val()
+	// Get all remaining members and rebuild positions (more reliable than incremental updates)
+	allMembers := r.redis.ZRangeWithScores(ctx, queueKey, 0, -1).Val()
 
-		// Decrement each position by 1
-		for _, member := range members {
-			r.redis.ZIncrBy(ctx, queueKey, -1, member)
+	if len(allMembers) > 0 {
+		// Use pipeline for atomic position updates
+		pipe := r.redis.Pipeline()
+		pipe.Del(ctx, queueKey)
+
+		// Re-add all members with correct positions
+		for i, member := range allMembers {
+			newPosition := i + 1
+			pipe.ZAdd(ctx, queueKey, redis.Z{
+				Score:  float64(newPosition),
+				Member: member.Member,
+			})
+		}
+
+		pipe.Expire(ctx, queueKey, RedisKeyTTL)
+		_, err := pipe.Exec(ctx)
+		if err != nil {
+			log.Printf("❌ RemoveFromQueue: Failed to rebuild positions after removing user %s: %v", userID, err)
 		}
 	}
 

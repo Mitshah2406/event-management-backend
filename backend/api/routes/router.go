@@ -93,17 +93,17 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 		// Setup event routes
 		r.setupEventRoutes(api)
 
+		// Setup cancellation routes (must be before waitlist routes for dependency injection)
+		r.setupCancellationRoutes(api)
+
+		// Setup waitlist routes (must be before booking routes for dependency injection)
+		r.setupWaitlistRoutes(api)
+
 		// Setup booking routes
 		r.setupBookingRoutes(api)
 
-		// Setup cancellation routes
-		r.setupCancellationRoutes(api)
-
 		// Setup analytics routes
 		r.setupAnalyticsRoutes(api)
-
-		// Setup waitlist routes
-		r.setupWaitlistRoutes(api)
 	}
 }
 
@@ -248,6 +248,25 @@ func (r *Router) setupBookingRoutes(rg *gin.RouterGroup) {
 
 	// Store booking service for dependency injection
 	r.bookingService = bookingService
+
+	// Update cancellation service with booking service dependency (if cancellation service exists)
+	if r.cancellationService != nil {
+		// Create booking service adapter for cancellation service
+		bookingServiceAdapter := &BookingServiceAdapter{bookingService: bookingService}
+
+		// Get existing waitlist service adapter if available
+		var waitlistAdapter cancellation.WaitlistService
+		if r.waitlistService != nil {
+			waitlistAdapter = &WaitlistServiceAdapter{waitlistService: r.waitlistService}
+		}
+
+		// Re-create cancellation service with booking dependency
+		cancellationRepo := cancellation.NewRepository(r.db.GetPostgreSQL())
+		r.cancellationService = cancellation.NewService(cancellationRepo, bookingServiceAdapter, waitlistAdapter)
+
+		// Recreate the controller with the updated service
+		r.cancellationController = cancellation.NewController(r.cancellationService)
+	}
 
 	// Setup booking routes
 	bookings.SetupBookingRoutes(rg, bookingController)

@@ -228,11 +228,16 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 
 	// Step 10: Mark waitlist as converted (if booking was from waitlist)
 	if s.waitlistService != nil {
+		fmt.Printf("🔄 BOOKING: Attempting to mark waitlist as converted for user %s, event %s, booking %s\n", userID, eventIDForWaitlist, booking.ID)
 		if err := s.waitlistService.MarkAsConverted(ctx, userID, eventIDForWaitlist, booking.ID); err != nil {
 			// Log warning but don't fail the booking since payment is processed
-			fmt.Printf("Warning: Failed to mark waitlist as converted for user %s, booking %s: %v\n",
+			fmt.Printf("❌ BOOKING: Failed to mark waitlist as converted for user %s, booking %s: %v\n",
 				userID, booking.ID, err)
+		} else {
+			fmt.Printf("✅ BOOKING: Successfully marked waitlist as converted for user %s, booking %s\n", userID, booking.ID)
 		}
+	} else {
+		fmt.Printf("⚠️ BOOKING: Waitlist service is nil, cannot mark as converted\n")
 	}
 
 	// Step 11: Release Redis hold

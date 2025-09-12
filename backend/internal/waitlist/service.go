@@ -545,31 +545,43 @@ func (s *service) validateJoinRequest(request *JoinWaitlistRequest) error {
 
 // MarkAsConverted marks a waitlist entry as converted after successful booking
 func (s *service) MarkAsConverted(ctx context.Context, userID, eventID, bookingID uuid.UUID) error {
+	log.Printf("🔄 MARK AS CONVERTED: Starting conversion for user %s, event %s, booking %s", userID, eventID, bookingID)
+
 	// Get the waitlist entry
 	entry, err := s.repo.GetEntry(ctx, userID, eventID)
 	if err != nil {
 		// No waitlist entry found - user wasn't on waitlist, which is fine
+		log.Printf("ℹ️  MARK AS CONVERTED: No waitlist entry found for user %s, event %s (user wasn't on waitlist)", userID, eventID)
 		return nil
 	}
+
+	log.Printf("📊 MARK AS CONVERTED: Found waitlist entry with status %s for user %s, event %s", entry.Status, userID, eventID)
 
 	// Only update if user was notified (allowing conversion)
 	if entry.Status != WaitlistStatusNotified {
 		// User wasn't in notified status, no need to update
+		log.Printf("⚠️  MARK AS CONVERTED: User %s is in status %s, not NOTIFIED - skipping conversion", userID, entry.Status)
 		return nil
 	}
 
+	log.Printf("📝 MARK AS CONVERTED: Updating database status to CONVERTED for user %s", userID)
 	// Update status to converted
 	entry.Status = WaitlistStatusConverted
 	err = s.repo.UpdateEntry(ctx, entry)
 	if err != nil {
+		log.Printf("❌ MARK AS CONVERTED: Database update failed for user %s: %v", userID, err)
 		return fmt.Errorf("failed to mark waitlist entry as converted: %w", err)
 	}
+	log.Printf("✅ MARK AS CONVERTED: Database status updated to CONVERTED for user %s", userID)
 
+	log.Printf("🗑️  MARK AS CONVERTED: Removing user %s from Redis queue for event %s", userID, eventID)
 	// Remove from Redis queue since they've successfully booked
 	err = s.repo.RemoveFromQueue(ctx, userID, eventID)
 	if err != nil {
-		log.Printf("Failed to remove converted user from Redis queue: %v", err)
+		log.Printf("❌ MARK AS CONVERTED: Failed to remove user %s from Redis queue: %v", userID, err)
 		// Don't return error as the main goal (marking as converted) succeeded
+	} else {
+		log.Printf("✅ MARK AS CONVERTED: Successfully removed user %s from Redis queue", userID)
 	}
 
 	log.Printf("✅ WAITLIST CONVERTED: User %s successfully booked from waitlist for event %s (booking %s)",

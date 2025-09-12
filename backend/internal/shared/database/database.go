@@ -51,7 +51,7 @@ func initPostgreSQL(cfg *config.Config) (*gorm.DB, error) {
 	// Configure GORM logger
 	var gormLogger logger.Interface
 	if cfg.IsDevelopment() {
-		gormLogger = logger.Default.LogMode(logger.Info)
+		gormLogger = logger.Default.LogMode(logger.Silent)
 	} else {
 		gormLogger = logger.Default.LogMode(logger.Silent)
 	}
