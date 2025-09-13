@@ -31,12 +31,6 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_DB=0
       
-      # Kafka Configuration
-      - KAFKA_BROKERS=kafka:9093
-      - KAFKA_CLIENT_ID=evently-backend
-      - KAFKA_AUTO_OFFSET_RESET=earliest
-      - KAFKA_ENABLE_AUTO_COMMIT=true
-      
       # JWT Configuration
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=900
@@ -65,8 +59,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      kafka:
         condition: service_healthy
     networks:
       - evently_network
@@ -182,81 +174,6 @@ services:
           memory: 64m
           cpus: '0.1'
 
-  # Zookeeper for Kafka
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.4
-    container_name: evently_zookeeper
-    restart: unless-stopped
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_INIT_LIMIT: 5
-      ZOOKEEPER_SYNC_LIMIT: 2
-    volumes:
-      - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_logs:/var/lib/zookeeper/log
-    networks:
-      - evently_network
-    healthcheck:
-      test: ["CMD", "bash", "-c", "echo 'ruok' | nc localhost 2181"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          memory: ${ZOOKEEPER_MEMORY_LIMIT:-256m}
-          cpus: '${ZOOKEEPER_CPU_LIMIT:-0.5}'
-        reservations:
-          memory: 128m
-          cpus: '0.25'
-
-  # Kafka Message Broker
-  kafka:
-    image: confluentinc/cp-kafka:7.4.4
-    container_name: evently_kafka
-    restart: unless-stopped
-    ports:
-      - "9003:9092"  # External access
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9003,PLAINTEXT_INTERNAL://kafka:9093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:9093
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-      KAFKA_DELETE_TOPIC_ENABLE: 'true'
-      KAFKA_LOG_CLEANUP_POLICY: delete
-      KAFKA_LOG_RETENTION_MS: 604800000  # 7 days
-      KAFKA_LOG_SEGMENT_BYTES: 1073741824  # 1GB
-    volumes:
-      - kafka_data:/var/lib/kafka/data
-    networks:
-      - evently_network
-    depends_on:
-      zookeeper:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: ${KAFKA_MEMORY_LIMIT:-512m}
-          cpus: '${KAFKA_CPU_LIMIT:-1.0}'
-        reservations:
-          memory: 256m
-          cpus: '0.5'
-
 volumes:
   postgres_data:
     driver: local
@@ -270,15 +187,6 @@ volumes:
   app_logs:
     driver: local
     name: evently_app_logs
-  zookeeper_data:
-    driver: local
-    name: evently_zookeeper_data
-  zookeeper_logs:
-    driver: local
-    name: evently_zookeeper_logs
-  kafka_data:
-    driver: local
-    name: evently_kafka_data
 
 networks:
   evently_network:
