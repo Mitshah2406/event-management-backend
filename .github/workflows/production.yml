@@ -28,59 +28,102 @@ jobs:
           ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
             set -e
             
-            # Navigate to project directory (updated path)
-            cd /var/www/EventlyAtlanMitShah/event-management-backend
+            echo "🚀 Starting deployment..."
+            
+            # Navigate to project directory (corrected path)
+            cd /var/www/event-management-backend
             
             # Pull latest changes
             echo "📄 Pulling latest code..."
             git pull origin main
             
+            # Navigate to backend directory for docker commands
+            cd backend
+            
             # Stop existing services gracefully
             echo "🛑 Stopping existing services..."
-            docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env down || true
+            docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env down --timeout 30 || true
             
-            # Build and restart services (using .env instead of .env.prod)
+            # Remove orphaned containers
+            docker container prune -f
+            
+            # Build and restart services
             echo "🐳 Building and restarting services..."
-            docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env pull
-            docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env up -d --build
+            docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env build --no-cache
+            docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env up -d
             
-            # Wait for services to be ready
-            echo "⏳ Waiting for services to start..."
-            sleep 45
+            # Wait for services to be ready (increased time for Kafka)
+            echo "⏳ Waiting for services to start (60 seconds)..."
+            sleep 60
+            
+            # Check individual service health
+            echo "🔍 Checking individual services..."
+            
+            # Check if containers are running
+            if ! docker compose -f deployments/docker/docker-compose.prod.yml ps | grep -q "healthy\|running"; then
+              echo "❌ Some services are not running properly"
+              docker compose -f deployments/docker/docker-compose.prod.yml ps
+              docker compose -f deployments/docker/docker-compose.prod.yml logs --tail=20
+              exit 1
+            fi
             
             # Health check with multiple attempts
-            echo "🩺 Performing health check..."
+            echo "🩺 Performing application health check..."
             max_attempts=5
             attempt=1
             
             while [ $attempt -le $max_attempts ]; do
               echo "Health check attempt $attempt/$max_attempts"
-              if curl -f http://localhost:9000/health >/dev/null 2>&1; then
-                echo "✅ Deployment successful! Application is healthy."
+              if curl -f -s http://localhost:9000/health >/dev/null 2>&1; then
+                echo "✅ Application health check passed!"
                 break
               else
                 if [ $attempt -eq $max_attempts ]; then
-                  echo "❌ Health check failed after $max_attempts attempts. Check logs:"
-                  docker compose -f deployments/docker/docker-compose.prod.yml logs --tail=50 app
+                  echo "❌ Health check failed after $max_attempts attempts."
+                  echo "📋 Container logs:"
+                  docker compose -f deployments/docker/docker-compose.prod.yml logs --tail=30 app
+                  echo "📋 Container status:"
+                  docker compose -f deployments/docker/docker-compose.prod.yml ps
                   exit 1
                 fi
-                echo "Attempt $attempt failed, retrying in 10 seconds..."
-                sleep 10
+                echo "⏳ Attempt $attempt failed, retrying in 15 seconds..."
+                sleep 15
                 attempt=$((attempt + 1))
               fi
             done
             
-            # Show service status
-            echo "📊 Service Status:"
+            # Reload nginx to ensure it's working with any new changes
+            echo "🔄 Reloading nginx..."
+            sudo systemctl reload nginx
+            
+            # Test HTTPS endpoints
+            echo "🔒 Testing HTTPS endpoints..."
+            if curl -f -s https://evently-api.mitshah.dev/health >/dev/null 2>&1; then
+              echo "✅ HTTPS endpoint is working"
+            else
+              echo "⚠️ HTTPS endpoint test failed, but continuing..."
+            fi
+            
+            # Show final service status
+            echo "📊 Final Service Status:"
             docker compose -f deployments/docker/docker-compose.prod.yml ps
             
+            # Show resource usage
+            echo "💾 System Resources:"
+            df -h / | head -2
+            free -h | head -2
+            
             # Cleanup old images and containers
-            echo "🧹 Cleaning up old images..."
-            docker image prune -f
-            docker container prune -f
+            echo "🧹 Cleaning up old images and containers..."
+            docker image prune -f --filter "until=24h"
+            docker volume prune -f
             
             echo "🎉 Deployment completed successfully!"
-            echo "🌍 Application is running at: http://$(curl -s ifconfig.me):9000"
+            echo "🌍 Application endpoints:"
+            echo "  - Main API: https://evently-api.mitshah.dev"
+            echo "  - WWW API: https://www.evently-api.mitshah.dev"
+            echo "  - Health: https://evently-api.mitshah.dev/health"
+            echo "  - Direct: http://$(curl -s ifconfig.me):9000/health"
           ENDSSH
 
       - name: Notify deployment status
@@ -88,8 +131,16 @@ jobs:
         run: |
           if [ ${{ job.status }} == 'success' ]; then
             echo "✅ Deployment to VPS completed successfully!"
-            echo "🌐 Check your application at: http://your-vps-ip:9000"
+            echo "🌐 Your application is available at:"
+            echo "  - Main: https://evently-api.mitshah.dev"
+            echo "  - WWW: https://www.evently-api.mitshah.dev"
+            echo "  - Health Check: https://evently-api.mitshah.dev/health"
           else
             echo "❌ Deployment to VPS failed!"
-            echo "📋 Check the workflow logs for details."
+            echo "📋 Please check the workflow logs for details."
+            echo "🔧 Common issues to check:"
+            echo "  - SSH key access"
+            echo "  - Server disk space"
+            echo "  - Docker service status"
+            echo "  - Environment variables"
           fi
