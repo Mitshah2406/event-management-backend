@@ -11,7 +11,6 @@ import (
 	"github.com/IBM/sarama"
 )
 
-// NotificationConsumer interface defines the contract for consuming notifications
 type NotificationConsumer interface {
 	StartConsumers(ctx context.Context, numWorkers int) error
 	Stop() error
@@ -19,7 +18,6 @@ type NotificationConsumer interface {
 	HealthCheck(ctx context.Context) error
 }
 
-// ChannelHandler processes notifications for a specific delivery channel
 type ChannelHandler interface {
 	Handle(ctx context.Context, notification *UnifiedNotification) error
 	GetChannel() NotificationChannel
@@ -67,29 +65,24 @@ type KafkaNotificationConsumer struct {
 	ready         chan bool
 	ctx           context.Context
 	cancel        context.CancelFunc
-	metrics       *ConsumerMetrics
-	metricsMu     sync.RWMutex
 }
 
 // NewKafkaNotificationConsumer creates a new Kafka notification consumer
 func NewKafkaNotificationConsumer(config *ConsumerConfig) (NotificationConsumer, error) {
 	saramaConfig := sarama.NewConfig()
 
-	// Consumer configuration
 	saramaConfig.Consumer.Group.Session.Timeout = time.Duration(config.SessionTimeoutMs) * time.Millisecond
 	saramaConfig.Consumer.Group.Heartbeat.Interval = time.Duration(config.HeartbeatMs) * time.Millisecond
 	saramaConfig.Consumer.Retry.Backoff = time.Duration(config.RetryBackoffMs) * time.Millisecond
 	saramaConfig.Consumer.MaxProcessingTime = config.MaxProcessingTime
 	saramaConfig.Consumer.Return.Errors = true
 
-	// Offset configuration
 	if config.OffsetOldest {
 		saramaConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
 	} else {
 		saramaConfig.Consumer.Offsets.Initial = sarama.OffsetNewest
 	}
 
-	// Auto-commit configuration
 	if config.AutoCommit {
 		saramaConfig.Consumer.Offsets.AutoCommit.Enable = true
 		saramaConfig.Consumer.Offsets.AutoCommit.Interval = 1 * time.Second
@@ -111,7 +104,6 @@ func NewKafkaNotificationConsumer(config *ConsumerConfig) (NotificationConsumer,
 		ready:         make(chan bool),
 		ctx:           ctx,
 		cancel:        cancel,
-		metrics:       &ConsumerMetrics{},
 	}, nil
 }
 
@@ -151,10 +143,6 @@ func (knc *KafkaNotificationConsumer) StartConsumers(ctx context.Context, numWor
 		<-knc.ready
 	}
 
-	knc.updateMetrics(func(m *ConsumerMetrics) {
-		m.ActiveWorkers = numWorkers
-	})
-
 	log.Printf("📥 All %d notification consumer workers are ready and consuming messages", numWorkers)
 
 	// Wait for context cancellation or all workers to finish
@@ -193,10 +181,7 @@ func (knc *KafkaNotificationConsumer) runWorker(ctx context.Context, workerID in
 func (knc *KafkaNotificationConsumer) handleErrors() {
 	for err := range knc.consumerGroup.Errors() {
 		log.Printf("📥 Consumer group error: %v", err)
-		knc.updateMetrics(func(m *ConsumerMetrics) {
-			m.ErrorCount++
-		})
-		// Here you could implement error metrics, alerting, etc.
+
 	}
 }
 
@@ -209,10 +194,6 @@ func (knc *KafkaNotificationConsumer) Stop() error {
 	if err != nil {
 		return fmt.Errorf("failed to close consumer group: %w", err)
 	}
-
-	knc.updateMetrics(func(m *ConsumerMetrics) {
-		m.ActiveWorkers = 0
-	})
 
 	log.Println("📥 Notification consumer stopped")
 	return nil
@@ -234,30 +215,6 @@ func (knc *KafkaNotificationConsumer) HealthCheck(ctx context.Context) error {
 		}
 
 		return nil
-	}
-}
-
-// updateMetrics safely updates consumer metrics
-func (knc *KafkaNotificationConsumer) updateMetrics(updateFn func(*ConsumerMetrics)) {
-	knc.metricsMu.Lock()
-	defer knc.metricsMu.Unlock()
-	updateFn(knc.metrics)
-}
-
-// GetMetrics returns current consumer metrics
-func (knc *KafkaNotificationConsumer) GetMetrics() *ConsumerMetrics {
-	knc.metricsMu.RLock()
-	defer knc.metricsMu.RUnlock()
-
-	// Return a copy to avoid race conditions
-	return &ConsumerMetrics{
-		MessagesProcessed: knc.metrics.MessagesProcessed,
-		MessagesSucceeded: knc.metrics.MessagesSucceeded,
-		MessagesFailed:    knc.metrics.MessagesFailed,
-		LastMessageTime:   knc.metrics.LastMessageTime,
-		ProcessingLatency: knc.metrics.ProcessingLatency,
-		ActiveWorkers:     knc.metrics.ActiveWorkers,
-		ErrorCount:        knc.metrics.ErrorCount,
 	}
 }
 
@@ -290,20 +247,7 @@ func (h *ConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 				return nil
 			}
 
-			startTime := time.Now()
 			err := h.processMessage(session.Context(), message)
-			processingTime := time.Since(startTime)
-
-			h.consumer.updateMetrics(func(m *ConsumerMetrics) {
-				m.MessagesProcessed++
-				m.LastMessageTime = startTime
-				m.ProcessingLatency = processingTime
-				if err != nil {
-					m.MessagesFailed++
-				} else {
-					m.MessagesSucceeded++
-				}
-			})
 
 			if err != nil {
 				log.Printf("📥 Worker %d: Error processing message: %v", h.workerID, err)
@@ -368,11 +312,6 @@ func (h *ConsumerGroupHandler) processMessage(ctx context.Context, message *sara
 		}
 	}
 
-	// If all channels failed and we should retry, send to retry queue
-	if successCount == 0 && notification.ShouldRetry() {
-		return h.scheduleRetry(ctx, &notification)
-	}
-
 	return lastErr
 }
 
@@ -432,19 +371,6 @@ func (h *ConsumerGroupHandler) executeWithRetry(ctx context.Context, handler Cha
 	return nil
 }
 
-// scheduleRetry schedules a notification for retry
-func (h *ConsumerGroupHandler) scheduleRetry(ctx context.Context, notification *UnifiedNotification) error {
-	notification.IncrementRetry()
-
-	// In a more sophisticated implementation, you would republish to a retry topic
-	// or delay queue. For now, we'll just log the retry attempt.
-	log.Printf("📥 Worker %d: Scheduling retry for notification %s (attempt %d/%d)",
-		h.workerID, notification.ID, notification.RetryCount, notification.MaxRetries)
-
-	// TODO: Implement retry queue or delay mechanism
-	return fmt.Errorf("retry scheduled for notification %s", notification.ID)
-}
-
 // EmailChannelHandler handles email notifications
 type EmailChannelHandler struct {
 	emailService EmailService
@@ -473,75 +399,4 @@ func (e *EmailChannelHandler) Handle(ctx context.Context, notification *UnifiedN
 // GetChannel returns the channel this handler processes
 func (e *EmailChannelHandler) GetChannel() NotificationChannel {
 	return NotificationChannelEmail
-}
-
-// SMSChannelHandler handles SMS notifications
-type SMSChannelHandler struct {
-	smsService SMSService
-}
-
-// SMSService interface for SMS sending (placeholder)
-type SMSService interface {
-	SendSMS(ctx context.Context, to, message string) error
-}
-
-// NewSMSChannelHandler creates a new SMS channel handler
-func NewSMSChannelHandler(smsService SMSService) ChannelHandler {
-	return &SMSChannelHandler{
-		smsService: smsService,
-	}
-}
-
-// Handle processes SMS notifications
-func (s *SMSChannelHandler) Handle(ctx context.Context, notification *UnifiedNotification) error {
-	if notification.RecipientPhone == nil {
-		log.Printf("📱 Skipping SMS - no phone number for user %s", notification.RecipientEmail)
-		return nil // Not an error, just no phone number
-	}
-
-	log.Printf("📱 Processing SMS notification for %s (ID: %s)", *notification.RecipientPhone, notification.ID)
-
-	// Generate SMS message (simplified)
-	message := fmt.Sprintf("%s - Evently", notification.Subject)
-	if len(message) > 160 { // SMS length limit
-		message = message[:157] + "..."
-	}
-
-	err := s.smsService.SendSMS(ctx, *notification.RecipientPhone, message)
-	if err != nil {
-		return fmt.Errorf("failed to send SMS notification: %w", err)
-	}
-
-	log.Printf("📱 SMS notification sent successfully to %s", *notification.RecipientPhone)
-	return nil
-}
-
-// GetChannel returns the channel this handler processes
-func (s *SMSChannelHandler) GetChannel() NotificationChannel {
-	return NotificationChannelSMS
-}
-
-// ConsumerMetrics contains metrics for monitoring consumer performance
-type ConsumerMetrics struct {
-	MessagesProcessed int64
-	MessagesSucceeded int64
-	MessagesFailed    int64
-	LastMessageTime   time.Time
-	ProcessingLatency time.Duration
-	ActiveWorkers     int
-	ErrorCount        int64
-}
-
-// MockSMSService is a mock implementation for SMS sending
-type MockSMSServiceImpl struct{}
-
-// NewMockSMSServiceImpl creates a new mock SMS service
-func NewMockSMSServiceImpl() *MockSMSServiceImpl {
-	return &MockSMSServiceImpl{}
-}
-
-// SendSMS sends a mock SMS
-func (m *MockSMSServiceImpl) SendSMS(ctx context.Context, to, message string) error {
-	log.Printf("📱 [MOCK SMS] To: %s, Message: %s", to, message)
-	return nil
 }

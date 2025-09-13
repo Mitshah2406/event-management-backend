@@ -1,31 +1,25 @@
 .
 ├── backend
 │   ├── api
-│   │   ├── docs
-│   │   ├── middleware
 │   │   └── routes
 │   │       └── router.go
 │   ├── bin
 │   │   ├── server
 │   │   └── test-build
 │   ├── cache_test_standalone.go
-│   ├── cache_test.log
 │   ├── cmd
 │   │   └── cache_test
 │   │       └── main.go
-│   ├── configs
 │   ├── deployments
-│   │   ├── docker
-│   │   │   ├── docker-compose.dev.yml
-│   │   │   ├── docker-compose.prod.yml
-│   │   │   ├── Dockerfile.dev
-│   │   │   ├── Dockerfile.prod
-│   │   │   └── init.sql
-│   │   └── k8s
+│   │   └── docker
+│   │       ├── docker-compose.dev.yml
+│   │       ├── docker-compose.prod.yml
+│   │       ├── Dockerfile.dev
+│   │       ├── Dockerfile.prod
+│   │       └── init.sql
 │   ├── docs
 │   │   └── swagger.yaml
 │   ├── emailtest.txt
-│   ├── evently_cache_test.log
 │   ├── go.mod
 │   ├── go.sum
 │   ├── internal
@@ -46,11 +40,13 @@
 │   │   │   └── user_service_adapter.go
 │   │   ├── bookings
 │   │   │   ├── controller.go
+│   │   │   ├── enums.go
 │   │   │   ├── models.go
 │   │   │   ├── repository.go
+│   │   │   ├── request-dto.go
+│   │   │   ├── response-dto.go
 │   │   │   ├── router.go
-│   │   │   ├── service.go
-│   │   │   └── status.go
+│   │   │   └── service.go
 │   │   ├── cancellation
 │   │   │   ├── controller.go
 │   │   │   ├── models.go
@@ -119,6 +115,8 @@
 │   │       ├── jobs.go
 │   │       ├── models.go
 │   │       ├── repository.go
+│   │       ├── request-dto.go
+│   │       ├── response-dto.go
 │   │       ├── router.go
 │   │       └── service.go
 │   ├── main
@@ -132,6 +130,7 @@
 │   │   └── ratelimit
 │   │       ├── middleware.go
 │   │       └── rate_limiter.go
+│   ├── project_tree.txt
 │   ├── server
 │   │   └── main.go
 │   ├── test1.go.txt
@@ -140,7 +139,8 @@
 │       ├── main
 │       └── server
 ├── Evently - Challenge.pdf
+├── Evently - Complete API Collection.postman_collection.json
 ├── Evently-Task.txt
 └── project_tree.txt
 
-39 directories, 105 files
+35 directories, 109 files

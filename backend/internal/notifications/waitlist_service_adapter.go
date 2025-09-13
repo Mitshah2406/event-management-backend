@@ -6,8 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// WaitlistServiceAdapter implements the waitlist.NotificationService interface
-// and adapts calls to the unified notification system
 type WaitlistServiceAdapter struct {
 	unifiedService NotificationService
 }
@@ -24,7 +22,6 @@ func (w *WaitlistServiceAdapter) SendWaitlistNotification(ctx context.Context, u
 	eventID, waitlistEntryID uuid.UUID, notificationType string,
 	templateData map[string]interface{}) error {
 
-	// Map string notification types to unified types
 	var unifiedType NotificationType
 	switch notificationType {
 	case "WAITLIST_SPOT_AVAILABLE":
@@ -39,12 +36,9 @@ func (w *WaitlistServiceAdapter) SendWaitlistNotification(ctx context.Context, u
 		unifiedType = NotificationTypeWaitlistSpotAvailable
 	}
 
-	// Use the unified notification service's waitlist method
 	return w.unifiedService.SendWaitlistNotification(ctx, userID, email, name, eventID, waitlistEntryID, unifiedType, templateData)
 }
 
-// GetUnifiedService returns the underlying unified notification service
-// This can be useful for accessing other notification methods
 func (w *WaitlistServiceAdapter) GetUnifiedService() NotificationService {
 	return w.unifiedService
 }

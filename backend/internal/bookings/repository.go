@@ -9,7 +9,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Repository interface defines the contract for booking data operations
 type Repository interface {
 	Create(ctx context.Context, booking *Booking) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Booking, error)
@@ -28,23 +27,20 @@ type Repository interface {
 	GetSeatBookingsByBookingID(ctx context.Context, bookingID uuid.UUID) ([]SeatBooking, error)
 }
 
-// repository implements the Repository interface
 type repository struct {
 	db *gorm.DB
 }
 
-// NewRepository creates a new booking repository instance
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-// Create creates a new booking with all related seat bookings and payment in a transaction
 func (r *repository) Create(ctx context.Context, booking *Booking) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Store associations temporarily
 		seatBookings := booking.SeatBookings
 		payments := booking.Payments
-		
+
 		// Clear associations to avoid GORM auto-creating them
 		booking.SeatBookings = nil
 		booking.Payments = nil
@@ -80,7 +76,6 @@ func (r *repository) Create(ctx context.Context, booking *Booking) error {
 	})
 }
 
-// GetByID retrieves a booking by its ID with all related data
 func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*Booking, error) {
 	var booking Booking
 	err := r.db.WithContext(ctx).
@@ -98,7 +93,6 @@ func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*Booking, error
 	return &booking, nil
 }
 
-// GetByHoldID retrieves a booking by hold ID
 func (r *repository) GetByHoldID(ctx context.Context, holdID string) (*Booking, error) {
 	var booking Booking
 	err := r.db.WithContext(ctx).
@@ -116,7 +110,6 @@ func (r *repository) GetByHoldID(ctx context.Context, holdID string) (*Booking, 
 	return &booking, nil
 }
 
-// GetByUserID retrieves bookings for a specific user with pagination
 func (r *repository) GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error) {
 	var bookings []Booking
 	query := r.db.WithContext(ctx).
@@ -140,7 +133,6 @@ func (r *repository) GetByUserID(ctx context.Context, userID uuid.UUID, limit, o
 	return bookings, nil
 }
 
-// Update updates an existing booking
 func (r *repository) Update(ctx context.Context, booking *Booking) error {
 	booking.UpdatedAt = time.Now()
 	err := r.db.WithContext(ctx).Save(booking).Error
@@ -150,7 +142,6 @@ func (r *repository) Update(ctx context.Context, booking *Booking) error {
 	return nil
 }
 
-// Cancel cancels a booking and all its related seat bookings
 func (r *repository) Cancel(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Get the booking first
@@ -172,7 +163,6 @@ func (r *repository) Cancel(ctx context.Context, id uuid.UUID) error {
 	})
 }
 
-// CreatePayment creates a new payment record
 func (r *repository) CreatePayment(ctx context.Context, payment *Payment) error {
 	err := r.db.WithContext(ctx).Create(payment).Error
 	if err != nil {
@@ -181,7 +171,6 @@ func (r *repository) CreatePayment(ctx context.Context, payment *Payment) error 
 	return nil
 }
 
-// UpdatePayment updates an existing payment record
 func (r *repository) UpdatePayment(ctx context.Context, payment *Payment) error {
 	payment.UpdatedAt = time.Now()
 	err := r.db.WithContext(ctx).Save(payment).Error
@@ -191,7 +180,6 @@ func (r *repository) UpdatePayment(ctx context.Context, payment *Payment) error 
 	return nil
 }
 
-// GetPaymentByID retrieves a payment by its ID
 func (r *repository) GetPaymentByID(ctx context.Context, paymentID uuid.UUID) (*Payment, error) {
 	var payment Payment
 	err := r.db.WithContext(ctx).First(&payment, "id = ?", paymentID).Error
@@ -204,7 +192,6 @@ func (r *repository) GetPaymentByID(ctx context.Context, paymentID uuid.UUID) (*
 	return &payment, nil
 }
 
-// CreateSeatBookings creates multiple seat booking records
 func (r *repository) CreateSeatBookings(ctx context.Context, seatBookings []SeatBooking) error {
 	if len(seatBookings) == 0 {
 		return nil
@@ -217,7 +204,6 @@ func (r *repository) CreateSeatBookings(ctx context.Context, seatBookings []Seat
 	return nil
 }
 
-// GetSeatBookingsByBookingID retrieves all seat bookings for a specific booking
 func (r *repository) GetSeatBookingsByBookingID(ctx context.Context, bookingID uuid.UUID) ([]SeatBooking, error) {
 	var seatBookings []SeatBooking
 	err := r.db.WithContext(ctx).

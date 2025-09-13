@@ -1,5 +1,4 @@
 .PHONY: \
-  db-info \
   build \
   run \
   dev \
@@ -8,35 +7,21 @@
   clean \
   docker-up \
   docker-down \
-  prod-up-simple \
-  prod-down-simple \
-  prod-logs-simple \
-  prod-health-simple \
-  generate-secrets \
-  prod-clean-simple \
-  prod-backup-simple \
-  prod-restore-simple \
-  update-env-template \
-  switch-to-dev \
-  switch-to-prod \
-  prepare-deploy \
-  check-deploy-ready \
-  test-prod-build \
+  prod-build \
+  prod-up \
+  prod-down \
+  prod-restart \
+  prod-logs \
+  prod-logs-app \
+  prod-logs-db \
+  prod-logs-redis \
+  prod-logs-kafka \
+  prod-status \
+  prod-db-info \
+  prod-redis-info \
+  prod-connect-db \
+  prod-connect-redis \
   help
-
-# Build the application
-db-info: ## Show database connection info
-	@echo "PostgreSQL (Beekeeper Studio):"
-	@echo "  Host: localhost"
-	@echo "  Port: 5432"
-	@echo "  Database: evently_db"
-	@echo "  Username: evently_user"
-	@echo "  Password: evently_password"
-	@echo ""
-	@echo "Redis (RedisInsight):"
-	@echo "  Host: localhost"
-	@echo "  Port: 6379"
-	@echo "  Password: (empty)"
 
 build: ## Build the application for production
 	@echo "Building application..."
@@ -91,7 +76,7 @@ clean: ## Clean build artifacts and stop containers
 	docker compose -f ./deployments/docker/docker-compose.dev.yml down
 	go clean -cache
 
-# Docker commands
+# Development Docker commands
 docker-up: ## Start development database services
 	@echo "Starting development services..."
 	docker compose -f ./deployments/docker/docker-compose.dev.yml up -d
@@ -100,55 +85,154 @@ docker-down: ## Stop development database services
 	@echo "Stopping development services..."
 	docker compose -f ./deployments/docker/docker-compose.dev.yml down
 
+# Production Docker commands
+prod-build: ## Build production Docker images
+	@echo "Building production Docker images..."
+	@if [ ! -f .env ]; then \
+		echo "❌ .env file not found. Please create it first."; \
+		exit 1; \
+	fi
+	docker compose -f ./deployments/docker/docker-compose.prod.yml build
+	@echo "✅ Production images built successfully!"
 
-# Start simplified production environment
-prod-up-simple: ## Start simplified production services (App, DB, Redis only)
-	@echo "Starting simplified production environment..."
+prod-up: ## Start production environment
+	@echo "Starting production environment..."
+	@if [ ! -f .env ]; then \
+		echo "❌ .env file not found. Please create it first."; \
+		exit 1; \
+	fi
 	docker compose -f ./deployments/docker/docker-compose.prod.yml --env-file .env up -d --build
-	@echo "🚀 Simplified production services started!"
+	@echo ""
+	@echo "🚀 Production services started successfully!"
+	@echo ""
 	@echo "📋 Service URLs:"
-	@echo "   App: http://localhost:9000"
-	@echo "   Health Check: http://localhost:9000/health"
-	@echo "   PostgreSQL: localhost:9001"
-	@echo "   Redis: localhost:9002"
+	@echo "   🌐 App: http://localhost:9000"
+	@echo "   ❤️  Health Check: http://localhost:9000/health"
+	@echo "   🗄️  PostgreSQL: localhost:9001"
+	@echo "   🔴 Redis: localhost:9002"
+	@echo "   📨 Kafka: localhost:9003"
+	@echo ""
+	@echo "💡 Use 'make prod-status' to check service health"
+	@echo "💡 Use 'make prod-logs' to view all logs"
 
-# Stop simplified production services
-prod-down-simple: ## Stop simplified production services
-	@echo "Stopping simplified production services..."
+prod-down: ## Stop production environment
+	@echo "Stopping production environment..."
 	docker compose -f ./deployments/docker/docker-compose.prod.yml down
-	@echo "🛑 Simplified production services stopped"
+	@echo "🛑 Production services stopped"
 
-# View simplified production logs
-prod-logs-simple: ## View simplified production logs
-	@echo "Viewing simplified production logs (press Ctrl+C to exit)..."
+prod-restart: ## Restart production environment
+	@echo "Restarting production environment..."
+	docker compose -f ./deployments/docker/docker-compose.prod.yml restart
+	@echo "🔄 Production services restarted"
+
+# Production logging commands
+prod-logs: ## View all production logs (follow mode)
+	@echo "Viewing all production logs (press Ctrl+C to exit)..."
 	docker compose -f ./deployments/docker/docker-compose.prod.yml logs -f
 
-# Health check for simplified production
-prod-health-simple: ## Check health of simplified production services
-	@echo "Checking simplified production service health..."
+prod-logs-app: ## View application logs only
+	@echo "Viewing application logs (press Ctrl+C to exit)..."
+	docker compose -f ./deployments/docker/docker-compose.prod.yml logs -f app
+
+prod-logs-db: ## View PostgreSQL logs only
+	@echo "Viewing PostgreSQL logs (press Ctrl+C to exit)..."
+	docker compose -f ./deployments/docker/docker-compose.prod.yml logs -f postgres
+
+prod-logs-redis: ## View Redis logs only
+	@echo "Viewing Redis logs (press Ctrl+C to exit)..."
+	docker compose -f ./deployments/docker/docker-compose.prod.yml logs -f redis
+
+prod-logs-kafka: ## View Kafka logs only
+	@echo "Viewing Kafka logs (press Ctrl+C to exit)..."
+	docker compose -f ./deployments/docker/docker-compose.prod.yml logs -f kafka
+
+# Production status and health
+prod-status: ## Check production services status and health
+	@echo "📊 Production Services Status"
+	@echo "==============================="
 	@echo ""
-	@echo "🔍 Service Status:"
+	@echo "🔍 Container Status:"
 	@docker compose -f ./deployments/docker/docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
 	@echo ""
 	@echo "🏥 Health Checks:"
-	@echo -n "App Health: "
-	@curl -f http://localhost:9000/health >/dev/null 2>&1 && echo "✅ Healthy" || echo "❌ Unhealthy"
-	@echo -n "PostgreSQL: "
+	@echo -n "   App Health: "
+	@curl -f -s http://localhost:9000/health >/dev/null 2>&1 && echo "✅ Healthy" || echo "❌ Unhealthy"
+	@echo -n "   PostgreSQL: "
 	@docker exec evently_postgres pg_isready -U $$(grep DB_USER .env | cut -d'=' -f2) >/dev/null 2>&1 && echo "✅ Ready" || echo "❌ Not Ready"
-	@echo -n "Redis: "
-	@if grep -q "REDIS_PASSWORD=" .env && [ -n "$(grep REDIS_PASSWORD .env | cut -d'=' -f2)" ]; then \
-		docker exec evently_redis redis-cli --pass "$(grep REDIS_PASSWORD .env | cut -d'=' -f2)" ping >/dev/null 2>&1 && echo "✅ Responding" || echo "❌ Not Responding"; \
+	@echo -n "   Redis: "
+	@if grep -q "REDIS_PASSWORD=" .env && [ -n "$$(grep REDIS_PASSWORD .env | cut -d'=' -f2)" ]; then \
+		docker exec evently_redis redis-cli --pass "$$(grep REDIS_PASSWORD .env | cut -d'=' -f2)" ping >/dev/null 2>&1 && echo "✅ Responding" || echo "❌ Not Responding"; \
 	else \
 		docker exec evently_redis redis-cli ping >/dev/null 2>&1 && echo "✅ Responding" || echo "❌ Not Responding"; \
 	fi
+	@echo -n "   Kafka: "
+	@docker exec evently_kafka kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1 && echo "✅ Ready" || echo "❌ Not Ready"
 
-	@echo "🧪 Testing production build..."
-	@if [ ! -f .env ]; then \
-		echo "❌ .env not found"; \
-		exit 1; \
+# Database connection information
+prod-db-info: ## Show PostgreSQL connection details for production
+	@echo "🗄️  PostgreSQL Production Connection Details"
+	@echo "=============================================="
+	@echo ""
+	@echo "📋 Connection Information:"
+	@echo "   Host: localhost (or your server IP)"
+	@echo "   Port: 9001"
+	@echo "   Database: $$(grep DB_NAME .env | cut -d'=' -f2 2>/dev/null || echo 'evently_prod')"
+	@echo "   Username: $$(grep DB_USER .env | cut -d'=' -f2 2>/dev/null || echo 'evently_user')"
+	@echo "   Password: $$(grep DB_PASSWORD .env | cut -d'=' -f2 2>/dev/null || echo 'check .env file')"
+	@echo "   SSL Mode: disable"
+	@echo ""
+	@echo "🔧 Connection String:"
+	@echo "   postgresql://$$(grep DB_USER .env | cut -d'=' -f2):[PASSWORD]@localhost:9001/$$(grep DB_NAME .env | cut -d'=' -f2)?sslmode=disable"
+	@echo ""
+	@echo "💻 Database Clients:"
+	@echo "   • pgAdmin (Web-based)"
+	@echo "   • Beekeeper Studio (Free)"
+	@echo ""
+	@echo "🐳 Docker CLI Access:"
+	@echo "   docker exec -it evently_postgres psql -U $$(grep DB_USER .env | cut -d'=' -f2) -d $$(grep DB_NAME .env | cut -d'=' -f2)"
+
+prod-redis-info: ## Show Redis connection details for production
+	@echo "🔴 Redis Production Connection Details"
+	@echo "======================================"
+	@echo ""
+	@echo "📋 Connection Information:"
+	@echo "   Host: localhost (or your server IP)"
+	@echo "   Port: 9002"
+	@if grep -q "REDIS_PASSWORD=" .env && [ -n "$$(grep REDIS_PASSWORD .env | cut -d'=' -f2)" ]; then \
+		echo "   Password: $$(grep REDIS_PASSWORD .env | cut -d'=' -f2)"; \
+	else \
+		echo "   Password: (no password set)"; \
 	fi
-	@echo "Building production image..."
-	@docker build -f ./deployments/docker/Dockerfile.prod -t evently-test:latest .
-	@echo "✅ Production build test successful!"
+	@echo "   Database: 0 (default)"
+	@echo ""
+	@echo "🔧 Connection String:"
+	@if grep -q "REDIS_PASSWORD=" .env && [ -n "$$(grep REDIS_PASSWORD .env | cut -d'=' -f2)" ]; then \
+		echo "   redis://:[PASSWORD]@localhost:9002/0"; \
+	else \
+		echo "   redis://localhost:9002/0"; \
+	fi
+	@echo ""
+	@echo "💻 Redis Clients:"
+	@echo "   • RedisInsight (Free, Official)"
+	@echo ""
+	@echo "🐳 Docker CLI Access:"
+	@if grep -q "REDIS_PASSWORD=" .env && [ -n "$$(grep REDIS_PASSWORD .env | cut -d'=' -f2)" ]; then \
+		echo "   docker exec -it evently_redis redis-cli -a $$(grep REDIS_PASSWORD .env | cut -d'=' -f2)"; \
+	else \
+		echo "   docker exec -it evently_redis redis-cli"; \
+	fi
+
+# Direct database connections
+prod-connect-db: ## Connect to production PostgreSQL via CLI
+	@echo "Connecting to PostgreSQL..."
+	@docker exec -it evently_postgres psql -U $$(grep DB_USER .env | cut -d'=' -f2) -d $$(grep DB_NAME .env | cut -d'=' -f2)
+
+prod-connect-redis: ## Connect to production Redis via CLI
+	@echo "Connecting to Redis..."
+	@if grep -q "REDIS_PASSWORD=" .env && [ -n "$$(grep REDIS_PASSWORD .env | cut -d'=' -f2)" ]; then \
+		docker exec -it evently_redis redis-cli -a $$(grep REDIS_PASSWORD .env | cut -d'=' -f2); \
+	else \
+		docker exec -it evently_redis redis-cli; \
+	fi
 
 .DEFAULT_GOAL := help

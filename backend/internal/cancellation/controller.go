@@ -115,9 +115,7 @@ func (c *Controller) UpdateCancellationPolicy(ctx *gin.Context) {
 	})
 }
 
-// RequestCancellation handles POST /api/v1/bookings/:id/request-cancel
 func (c *Controller) RequestCancellation(ctx *gin.Context) {
-	// Parse booking ID from URL
 	bookingIDStr := ctx.Param("id")
 	bookingID, err := uuid.Parse(bookingIDStr)
 	if err != nil {
@@ -125,7 +123,7 @@ func (c *Controller) RequestCancellation(ctx *gin.Context) {
 		return
 	}
 
-	// Get user ID from JWT context
+	// Get user ID from JWT
 	userIDInterface, exists := ctx.Get("user_id")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
@@ -144,7 +142,6 @@ func (c *Controller) RequestCancellation(ctx *gin.Context) {
 		return
 	}
 
-	// Parse request body
 	var req CancellationRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -154,7 +151,6 @@ func (c *Controller) RequestCancellation(ctx *gin.Context) {
 		return
 	}
 
-	// Request cancellation
 	cancellation, err := c.service.RequestCancellation(ctx.Request.Context(), bookingID, userID, req)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{

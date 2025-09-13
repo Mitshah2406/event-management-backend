@@ -7,39 +7,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// NotificationType represents different types of notifications in the system
 type NotificationType string
 
 const (
-	// Waitlist notifications
 	NotificationTypeWaitlistSpotAvailable  NotificationType = "WAITLIST_SPOT_AVAILABLE"
 	NotificationTypeWaitlistPositionUpdate NotificationType = "WAITLIST_POSITION_UPDATE"
 	NotificationTypeWaitlistReminder       NotificationType = "WAITLIST_REMINDER"
 	NotificationTypeWaitlistExpired        NotificationType = "WAITLIST_EXPIRED"
 
-	// Booking notifications
 	NotificationTypeBookingConfirmed NotificationType = "BOOKING_CONFIRMED"
-	NotificationTypeBookingReminder  NotificationType = "BOOKING_REMINDER"
-	NotificationTypeBookingCancelled NotificationType = "BOOKING_CANCELLED"
-	NotificationTypeBookingUpdated   NotificationType = "BOOKING_UPDATED"
-	NotificationTypeBookingRefunded  NotificationType = "BOOKING_REFUNDED"
-
-	// Event notifications
-	NotificationTypeEventUpdated      NotificationType = "EVENT_UPDATED"
-	NotificationTypeEventCancelled    NotificationType = "EVENT_CANCELLED"
-	NotificationTypeEventReminder     NotificationType = "EVENT_REMINDER"
-	NotificationTypeEventStartingSoon NotificationType = "EVENT_STARTING_SOON"
-
-	// Account notifications
-	NotificationTypeWelcome        NotificationType = "WELCOME"
-	NotificationTypePasswordReset  NotificationType = "PASSWORD_RESET"
-	NotificationTypeAccountVerify  NotificationType = "ACCOUNT_VERIFY"
-	NotificationTypeProfileUpdated NotificationType = "PROFILE_UPDATED"
-
-	// Payment notifications
-	NotificationTypePaymentSuccess  NotificationType = "PAYMENT_SUCCESS"
-	NotificationTypePaymentFailed   NotificationType = "PAYMENT_FAILED"
-	NotificationTypeRefundProcessed NotificationType = "REFUND_PROCESSED"
+	NotificationTypeWelcome          NotificationType = "WELCOME"
 )
 
 // NotificationChannel represents different delivery channels
@@ -47,9 +24,6 @@ type NotificationChannel string
 
 const (
 	NotificationChannelEmail NotificationChannel = "EMAIL"
-	NotificationChannelSMS   NotificationChannel = "SMS"
-	NotificationChannelPush  NotificationChannel = "PUSH"
-	NotificationChannelInApp NotificationChannel = "IN_APP"
 )
 
 // NotificationPriority represents the priority level of notifications
@@ -79,44 +53,36 @@ const (
 
 // UnifiedNotification represents a notification message that can be sent through various channels
 type UnifiedNotification struct {
-	// Metadata
 	ID       uuid.UUID             `json:"id"`
 	Type     NotificationType      `json:"type"`
 	Priority NotificationPriority  `json:"priority"`
 	Channels []NotificationChannel `json:"channels"`
 
-	// Recipient information
 	RecipientID    uuid.UUID `json:"recipient_id"`
 	RecipientEmail string    `json:"recipient_email"`
 	RecipientPhone *string   `json:"recipient_phone,omitempty"`
 	RecipientName  string    `json:"recipient_name"`
 
-	// Content
 	Subject      string                 `json:"subject"`
 	TemplateID   string                 `json:"template_id"`
 	TemplateData map[string]interface{} `json:"template_data"`
 
-	// Context and relationships
 	EventID         *uuid.UUID `json:"event_id,omitempty"`
 	BookingID       *uuid.UUID `json:"booking_id,omitempty"`
 	WaitlistEntryID *uuid.UUID `json:"waitlist_entry_id,omitempty"`
 
-	// Scheduling and expiry
 	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 
-	// Tracking
 	Status           NotificationStatus `json:"status"`
 	RetryCount       int                `json:"retry_count"`
 	MaxRetries       int                `json:"max_retries"`
 	LastError        *string            `json:"last_error,omitempty"`
 	DeliveryAttempts []DeliveryAttempt  `json:"delivery_attempts,omitempty"`
-
-	// Timestamps
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	SentAt      *time.Time `json:"sent_at,omitempty"`
-	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+	SentAt           *time.Time         `json:"sent_at,omitempty"`
+	DeliveredAt      *time.Time         `json:"delivered_at,omitempty"`
 }
 
 // DeliveryAttempt tracks individual delivery attempts for notifications
@@ -136,7 +102,6 @@ type NotificationTemplate struct {
 	Subject   string              `json:"subject"`
 	HTMLBody  string              `json:"html_body"`
 	TextBody  string              `json:"text_body"`
-	SMSBody   string              `json:"sms_body,omitempty"`
 	Variables []string            `json:"variables"`
 	CreatedAt time.Time           `json:"created_at"`
 	UpdatedAt time.Time           `json:"updated_at"`
@@ -288,26 +253,15 @@ func (nb *NotificationBuilder) Build() *UnifiedNotification {
 // GetDefaultPriority returns the default priority for a notification type
 func GetDefaultPriority(notType NotificationType) NotificationPriority {
 	switch notType {
-	case NotificationTypeWaitlistSpotAvailable,
-		NotificationTypeBookingCancelled,
-		NotificationTypeEventCancelled,
-		NotificationTypePaymentFailed:
+	case NotificationTypeWaitlistSpotAvailable:
 		return NotificationPriorityHigh
 
 	case NotificationTypeWaitlistExpired,
-		NotificationTypeBookingConfirmed,
-		NotificationTypePaymentSuccess,
-		NotificationTypeRefundProcessed:
+		NotificationTypeBookingConfirmed:
 		return NotificationPriorityMedium
 
-	case NotificationTypeWaitlistPositionUpdate,
-		NotificationTypeEventReminder,
-		NotificationTypeBookingReminder:
+	case NotificationTypeWaitlistPositionUpdate:
 		return NotificationPriorityLow
-
-	case NotificationTypePasswordReset,
-		NotificationTypeAccountVerify:
-		return NotificationPriorityCritical
 
 	default:
 		return NotificationPriorityMedium
@@ -316,25 +270,7 @@ func GetDefaultPriority(notType NotificationType) NotificationPriority {
 
 // GetDefaultChannels returns the default channels for a notification type
 func GetDefaultChannels(notType NotificationType) []NotificationChannel {
-	switch notType {
-	case NotificationTypeWaitlistSpotAvailable,
-		NotificationTypeBookingCancelled,
-		NotificationTypeEventCancelled:
-		return []NotificationChannel{NotificationChannelEmail, NotificationChannelSMS}
-
-	case NotificationTypePasswordReset,
-		NotificationTypeAccountVerify,
-		NotificationTypeBookingConfirmed,
-		NotificationTypePaymentSuccess:
-		return []NotificationChannel{NotificationChannelEmail}
-
-	case NotificationTypeEventReminder,
-		NotificationTypeBookingReminder:
-		return []NotificationChannel{NotificationChannelEmail, NotificationChannelInApp}
-
-	default:
-		return []NotificationChannel{NotificationChannelEmail}
-	}
+	return []NotificationChannel{NotificationChannelEmail}
 }
 
 // GetPartitionKey returns the partition key for Kafka (user_id for load balancing)

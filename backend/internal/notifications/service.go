@@ -11,13 +11,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// NotificationService provides a unified interface for the notification system
 type NotificationService interface {
-	// Core notification methods
 	SendNotification(ctx context.Context, notification *UnifiedNotification) error
 	SendBatchNotifications(ctx context.Context, notifications []*UnifiedNotification) error
 
-	// Convenience methods for different notification types
 	SendWaitlistNotification(ctx context.Context, userID uuid.UUID, email, name string,
 		eventID, waitlistEntryID uuid.UUID, notificationType NotificationType,
 		templateData map[string]interface{}) error
@@ -30,33 +27,26 @@ type NotificationService interface {
 		eventID uuid.UUID, notificationType NotificationType,
 		templateData map[string]interface{}) error
 
-	// Service management
 	Start(ctx context.Context) error
 	Stop() error
 	HealthCheck(ctx context.Context) error
-	GetMetrics() (*ServiceMetrics, error)
 }
 
 // ServiceConfig holds configuration for the notification service
 type ServiceConfig struct {
-	// Environment
-	Environment string // "development", "production", etc.
+	Environment string
 
-	// Kafka configuration
 	KafkaBrokers       []string
 	NotificationTopic  string
 	ConsumerGroupID    string
 	NumConsumerWorkers int
 
-	// SMTP configuration
-	SMTPHost      string
-	SMTPPort      int
-	SMTPUsername  string
-	SMTPPassword  string
-	SMTPFromEmail string
-	SMTPFromName  string
-
-	// Feature flags
+	SMTPHost           string
+	SMTPPort           int
+	SMTPUsername       string
+	SMTPPassword       string
+	SMTPFromEmail      string
+	SMTPFromName       string
 	EnableEmailChannel bool
 	EnableSMSChannel   bool
 	EnablePushChannel  bool
@@ -77,8 +67,6 @@ func NewServiceConfigFromEnv() *ServiceConfig {
 		SMTPFromEmail:      getEnvString("FROM_EMAIL", ""),
 		SMTPFromName:       getEnvString("SMTP_FROM_NAME", "Evently"),
 		EnableEmailChannel: getEnvBool("ENABLE_EMAIL_CHANNEL", true),
-		EnableSMSChannel:   getEnvBool("ENABLE_SMS_CHANNEL", false), // Disabled by default until SMS service is implemented
-		EnablePushChannel:  getEnvBool("ENABLE_PUSH_CHANNEL", false),
 	}
 
 	return config
@@ -93,7 +81,6 @@ type UnifiedNotificationService struct {
 
 	// Services
 	emailService EmailService
-	smsService   SMSService
 
 	// State
 	isRunning bool
@@ -108,7 +95,6 @@ func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, 
 		config = NewServiceConfigFromEnv()
 	}
 
-	// Create producer
 	producerConfig := DefaultKafkaProducerConfig()
 	producerConfig.Brokers = config.KafkaBrokers
 	producerConfig.NotificationTopic = config.NotificationTopic
@@ -118,7 +104,6 @@ func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, 
 		return nil, fmt.Errorf("failed to create notification producer: %w", err)
 	}
 
-	// Create consumer
 	consumerConfig := DefaultConsumerConfig()
 	consumerConfig.Brokers = config.KafkaBrokers
 	consumerConfig.Topics = []string{config.NotificationTopic}
@@ -129,10 +114,8 @@ func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, 
 		return nil, fmt.Errorf("failed to create notification consumer: %w", err)
 	}
 
-	// Create publisher
 	publisher := NewNotificationPublisher(producer)
 
-	// Create email service - only SMTP is supported
 	var emailService EmailService
 	if config.SMTPHost == "" || config.SMTPUsername == "" {
 		return nil, fmt.Errorf("SMTP configuration is required: missing SMTP_HOST or SMTP_USERNAME")
@@ -150,9 +133,6 @@ func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, 
 	emailService = NewSMTPEmailService(smtpConfig)
 	log.Printf("📧 SMTP email service initialized (Host: %s, Port: %d)", config.SMTPHost, config.SMTPPort)
 
-	// Create SMS service (mock for now)
-	var smsService SMSService = NewMockSMSServiceImpl()
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &UnifiedNotificationService{
@@ -161,7 +141,6 @@ func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, 
 		consumer:     consumer,
 		publisher:    publisher,
 		emailService: emailService,
-		smsService:   smsService,
 		isRunning:    false,
 		ctx:          ctx,
 		cancel:       cancel,
@@ -184,13 +163,6 @@ func (uns *UnifiedNotificationService) Start(ctx context.Context) error {
 		emailHandler := NewEmailChannelHandler(uns.emailService)
 		if err := uns.consumer.RegisterHandler(NotificationChannelEmail, emailHandler); err != nil {
 			return fmt.Errorf("failed to register email handler: %w", err)
-		}
-	}
-
-	if uns.config.EnableSMSChannel {
-		smsHandler := NewSMSChannelHandler(uns.smsService)
-		if err := uns.consumer.RegisterHandler(NotificationChannelSMS, smsHandler); err != nil {
-			return fmt.Errorf("failed to register SMS handler: %w", err)
 		}
 	}
 
@@ -291,23 +263,6 @@ func (uns *UnifiedNotificationService) HealthCheck(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// GetMetrics returns service metrics
-func (uns *UnifiedNotificationService) GetMetrics() (*ServiceMetrics, error) {
-	// For now, return basic metrics - can be enhanced later with proper metrics collection
-	consumerMetrics := uns.consumer.(*KafkaNotificationConsumer).GetMetrics()
-
-	return &ServiceMetrics{
-		ConsumerMetrics: *consumerMetrics,
-		IsRunning:       uns.isRunning,
-	}, nil
-}
-
-// ServiceMetrics contains metrics for the entire notification service
-type ServiceMetrics struct {
-	ConsumerMetrics ConsumerMetrics `json:"consumer_metrics"`
-	IsRunning       bool            `json:"is_running"`
 }
 
 // Helper functions for environment variables

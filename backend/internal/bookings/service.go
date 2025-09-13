@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// SeatService interface for seat-related operations (to avoid circular dependency)
 type SeatService interface {
 	ValidateHold(ctx context.Context, holdID string, userID string) (*HoldValidationResult, error)
 	ReleaseHold(ctx context.Context, holdID string) error
@@ -19,19 +18,16 @@ type SeatService interface {
 	GetHoldDetails(ctx context.Context, holdID string) (*SeatHoldDetails, error)
 }
 
-// WaitlistService interface for waitlist-related operations (to avoid circular dependency)
 type WaitlistService interface {
 	GetWaitlistStatusForBooking(ctx context.Context, userID, eventID uuid.UUID) (*WaitlistStatusForBooking, error)
 	MarkAsConverted(ctx context.Context, userID, eventID, bookingID uuid.UUID) error
 }
 
-// WaitlistStatusForBooking represents waitlist status (simplified for bookings)
 type WaitlistStatusForBooking struct {
 	Status    string `json:"status"`
 	IsExpired bool   `json:"is_expired"`
 }
 
-// SeatHoldDetails represents hold details (matching seats service structure)
 type SeatHoldDetails struct {
 	HoldID  string   `json:"hold_id"`
 	UserID  string   `json:"user_id"`
@@ -40,7 +36,6 @@ type SeatHoldDetails struct {
 	TTL     int      `json:"ttl_seconds"`
 }
 
-// Service interface defines the contract for booking business logic
 type Service interface {
 	ConfirmBooking(ctx context.Context, userID uuid.UUID, req BookingConfirmationRequest) (*BookingConfirmationResponse, error)
 	GetBooking(ctx context.Context, bookingID uuid.UUID) (*Booking, error)
@@ -78,7 +73,6 @@ type SeatInfo struct {
 	SectionName string    `json:"section_name"`
 }
 
-// NewService creates a new booking service instance
 func NewService(repo Repository, seatService SeatService, waitlistService WaitlistService) Service {
 	return &service{
 		repo:            repo,
@@ -87,7 +81,6 @@ func NewService(repo Repository, seatService SeatService, waitlistService Waitli
 	}
 }
 
-// ConfirmBooking processes a booking confirmation
 func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req BookingConfirmationRequest) (*BookingConfirmationResponse, error) {
 	// Step 1: Validate the hold
 	holdValidation, err := s.seatService.ValidateHold(ctx, req.HoldID, userID.String())
@@ -180,7 +173,7 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 		return nil, fmt.Errorf("failed to generate booking reference: %w", err)
 	}
 
-	// Step 5: Parse event ID and create booking record
+	// Step 5: create booking record
 	eventUUID, err := uuid.Parse(req.EventID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid event ID: %w", err)
@@ -188,7 +181,7 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 
 	booking := &Booking{
 		UserID:       userID,
-		EventID:      eventUUID, // Use the correct event ID from request
+		EventID:      eventUUID,
 		TotalSeats:   len(seats),
 		TotalPrice:   totalAmount,
 		Status:       "CONFIRMED",
@@ -202,7 +195,7 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 	// Step 7: Create payment record with transaction ID
 	payment := &Payment{
 		Amount:        totalAmount,
-		Currency:      "USD",
+		Currency:      "INR",
 		Status:        "PENDING",
 		PaymentMethod: req.PaymentMethod,
 		TransactionID: transactionID,
@@ -214,12 +207,7 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 		return nil, fmt.Errorf("failed to create booking: %w", err)
 	}
 
-	// Note: No need to update seat status to BOOKED since:
-	// 1. Seat status constraint only allows AVAILABLE/BLOCKED
-	// 2. Booking status is tracked via seat_bookings table
-	// 3. GetEffectiveStatus() method handles event-specific booking logic
-
-	// Step 9: Process mock payment (update the existing payment to completed)
+	// Step 9: Process mock payment
 	paymentInfo, err := s.ProcessPayment(ctx, booking.ID, totalAmount, req.PaymentMethod)
 	if err != nil {
 		return nil, fmt.Errorf("payment processing failed: %w", err)
@@ -245,7 +233,7 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 		fmt.Printf("Warning: Failed to release hold %s: %v\n", req.HoldID, err)
 	}
 
-	// Step 12: Return confirmation response
+	// Step 12: Return response
 	response := &BookingConfirmationResponse{
 		BookingID:  booking.ID.String(),
 		BookingRef: booking.BookingRef,
@@ -260,17 +248,14 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 	return response, nil
 }
 
-// GetBooking retrieves a booking by ID
 func (s *service) GetBooking(ctx context.Context, bookingID uuid.UUID) (*Booking, error) {
 	return s.repo.GetByID(ctx, bookingID)
 }
 
-// GetUserBookings retrieves bookings for a specific user
 func (s *service) GetUserBookings(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error) {
 	return s.repo.GetByUserID(ctx, userID, limit, offset)
 }
 
-// CancelBooking cancels a booking and releases the seats
 func (s *service) CancelBooking(ctx context.Context, bookingID uuid.UUID, userID uuid.UUID) error {
 	// Get the booking
 	booking, err := s.repo.GetByID(ctx, bookingID)
@@ -293,9 +278,6 @@ func (s *service) CancelBooking(ctx context.Context, bookingID uuid.UUID, userID
 		return fmt.Errorf("failed to cancel booking: %w", err)
 	}
 
-	// Seats are automatically released when booking is cancelled
-	// No need to update seat status as booking records handle the "booked" state
-
 	return nil
 }
 
@@ -317,14 +299,10 @@ func (s *service) CancelBookingInternal(ctx context.Context, bookingID uuid.UUID
 		return fmt.Errorf("failed to cancel booking: %w", err)
 	}
 
-	// Seats are automatically released when booking is cancelled
-	// The seat_bookings table tracks which seats are booked for which booking
-	// When booking status becomes CANCELLED, those seats become available again
-
 	return nil
 }
 
-// ProcessPayment processes a mock payment
+// processes a mock payment
 func (s *service) ProcessPayment(ctx context.Context, bookingID uuid.UUID, amount float64, method string) (*PaymentInfo, error) {
 	// Get the existing payment record from the booking
 	booking, err := s.repo.GetByID(ctx, bookingID)
@@ -358,7 +336,6 @@ func (s *service) ProcessPayment(ctx context.Context, bookingID uuid.UUID, amoun
 	}, nil
 }
 
-// generateBookingReference generates a unique booking reference
 func (s *service) generateBookingReference() (string, error) {
 	timestamp := time.Now().Format("20060102")
 
@@ -377,7 +354,7 @@ func (s *service) generateBookingReference() (string, error) {
 	return fmt.Sprintf("EVT-%s-%s", timestamp, string(randomPart)), nil
 }
 
-// generateTransactionID generates a mock transaction ID
+// mock tr id
 func (s *service) generateTransactionID() string {
 	timestamp := time.Now().Unix()
 	uuid := uuid.New().String()
