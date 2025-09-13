@@ -38,8 +38,6 @@ type Repository interface {
 	// User Analytics
 	GetUserAnalytics() (*UserAnalytics, error)
 	GetUserOverview() (*UserOverview, error)
-	GetUserRetentionMetrics() (*UserRetention, error)
-	GetUserDemographics() (*UserDemographics, error)
 	GetUserBehaviorAnalytics() (*UserBehavior, error)
 
 	// User-facing Analytics
@@ -209,8 +207,8 @@ func (r *repository) GetOverviewMetrics() (*OverviewMetrics, error) {
 		metrics.CancellationRate = float64(cancelledBookings) / float64(allBookings) * 100
 	}
 
-	// Calculate average utilization (placeholder - would need venue capacity data)
-	metrics.AvgUtilization = 75.0 // Placeholder
+	// Note: Average utilization calculation requires venue capacity data
+	metrics.AvgUtilization = 0.0
 
 	// Calculate revenue growth (comparing last 30 days to previous 30 days)
 	var currentRevenue, previousRevenue float64
@@ -415,10 +413,8 @@ func (r *repository) GetEventAnalytics(eventID uuid.UUID) (*EventAnalytics, erro
 
 	analytics.BookingsByDay = dailyBookings
 
-	// Placeholder for capacity utilization (would need venue template data)
-	analytics.CapacityUtilization = 80.0
-
-	// Placeholder for top sections and hourly trends
+	// Note: Capacity utilization requires venue template data which is not available
+	// Top sections and hourly trends require detailed booking timing data
 	analytics.TopSections = []SectionStats{}
 	analytics.BookingTrends = []HourlyStats{}
 
@@ -533,8 +529,8 @@ func (r *repository) GetGlobalEventAnalytics() (*GlobalEventAnalytics, error) {
 
 	analytics.RevenueByMonth = monthlyRevenue
 
-	// Placeholder for average utilization
-	analytics.AverageUtilization = 75.0
+	// Note: Average utilization calculation requires venue capacity data
+	analytics.AverageUtilization = 0.0
 
 	return &analytics, nil
 }
@@ -561,9 +557,10 @@ func (r *repository) GetEventPerformanceMetrics() ([]EventPerformance, error) {
 		return nil, fmt.Errorf("failed to get event performance metrics: %w", err)
 	}
 
-	// Calculate utilization for each event (placeholder)
+	// Note: Utilization calculation requires venue capacity data which is not available
+	// Setting to 0 to indicate data not available rather than fake placeholder
 	for i := range performances {
-		performances[i].Utilization = 80.0 // Placeholder value
+		performances[i].Utilization = 0.0
 	}
 
 	return performances, nil
@@ -646,8 +643,8 @@ func (r *repository) GetEventAnalyticsOverview() (*EventOverview, error) {
 
 	overview.RevenueByMonth = monthlyRevenue
 
-	// Placeholder values
-	overview.AverageUtilization = 75.0
+	// Note: Average utilization requires venue capacity data
+	overview.AverageUtilization = 0.0
 
 	return &overview, nil
 }
@@ -770,7 +767,7 @@ func (r *repository) GetTagComparisons() ([]TagComparison, error) {
 			t.id as tag_id,
 			t.name as tag_name,
 			COUNT(DISTINCT et.event_id) as event_count,
-			AVG(CASE WHEN b.status = 'CONFIRMED' THEN 75.0 ELSE 0.0 END) as avg_capacity_util, -- Placeholder
+			0.0 as avg_capacity_util, -- Requires venue capacity data
 			AVG(b.total_price / b.total_seats) as avg_ticket_price,
 			COALESCE(SUM(b.total_price), 0) as total_revenue,
 			COUNT(DISTINCT b.id)::float / NULLIF(COUNT(DISTINCT et.event_id), 0) as booking_conversion
@@ -880,11 +877,11 @@ func (r *repository) GetBookingAnalytics() (*BookingAnalytics, error) {
 		return nil, fmt.Errorf("failed to get booking trends: %w", err)
 	}
 
-	// Get performance stats (placeholder implementation)
+	// Note: Performance stats require session tracking and conversion funnel data
 	performance := BookingPerformance{
-		ConversonRate:   85.0, // Placeholder
-		AbandonmentRate: 15.0, // Placeholder
-		AvgTimeToBook:   24.5, // Placeholder - hours
+		ConversonRate:   0.0, // Requires conversion tracking
+		AbandonmentRate: 0.0, // Requires session analytics
+		AvgTimeToBook:   0.0, // Requires user behavior tracking
 	}
 
 	return &BookingAnalytics{
@@ -962,12 +959,9 @@ func (r *repository) GetBookingOverview() (*BookingOverview, error) {
 	}
 	overview.DailyBookings = dailyStats
 
-	// Get payment methods (placeholder - would need payments table analysis)
-	overview.PaymentMethods = []PaymentMethodStats{
-		{Method: "credit_card", Bookings: int(confirmedBookings * 70 / 100), Success: 98.5},
-		{Method: "paypal", Bookings: int(confirmedBookings * 20 / 100), Success: 97.2},
-		{Method: "bank_transfer", Bookings: int(confirmedBookings * 10 / 100), Success: 99.1},
-	}
+	// Note: Payment methods analysis requires detailed payment data
+	// This would need to query the payments table when available
+	overview.PaymentMethods = []PaymentMethodStats{}
 
 	return &overview, nil
 }
@@ -1073,17 +1067,12 @@ func (r *repository) GetBookingTrends() (*BookingTrendAnalysis, error) {
 		trends.PeriodComparison.PercentChange = ((currentRevenue - previousRevenue) / previousRevenue) * 100
 	}
 
-	// Get seasonality data (placeholder implementation)
+	// Note: Seasonality analysis should use actual booking data by day/time
+	// This requires aggregating bookings by day of week, hour, and month
 	trends.Seasonality = SeasonalityData{
-		ByDayOfWeek: []WeekdayStats{
-			{Weekday: "Monday", Bookings: 120, Revenue: 15000},
-			{Weekday: "Tuesday", Bookings: 95, Revenue: 12000},
-			{Weekday: "Wednesday", Bookings: 110, Revenue: 14000},
-			{Weekday: "Thursday", Bookings: 130, Revenue: 16500},
-			{Weekday: "Friday", Bookings: 180, Revenue: 22000},
-			{Weekday: "Saturday", Bookings: 220, Revenue: 28000},
-			{Weekday: "Sunday", Bookings: 145, Revenue: 18500},
-		},
+		ByDayOfWeek: []WeekdayStats{},
+		ByHour:      []HourlyStats{},
+		ByMonth:     []MonthStats{},
 	}
 
 	// Calculate growth metrics
@@ -1136,22 +1125,16 @@ func (r *repository) GetCancellationAnalytics() (*CancellationAnalytics, error) 
 	analytics.Overview = CancellationOverview{
 		TotalCancellations: int(totalCancellations),
 		RefundAmount:       totalRefundAmount,
-		RefundRate:         100.0, // Assuming 100% refund rate
-		AvgTimeToCancel:    48.0,  // Placeholder - 48 hours average
+		RefundRate:         0.0, // Requires refund policy tracking
+		AvgTimeToCancel:    0.0, // Requires cancellation timing analysis
 	}
 
 	if totalBookings > 0 {
 		analytics.Overview.CancellationRate = float64(totalCancellations) / float64(totalBookings) * 100
 	}
 
-	// Placeholder data for cancellation reasons, timing, etc.
-	analytics.CancellationReasons = []CancellationReason{
-		{Reason: "Schedule conflict", Count: int(totalCancellations * 35 / 100), Percentage: 35.0},
-		{Reason: "Personal emergency", Count: int(totalCancellations * 25 / 100), Percentage: 25.0},
-		{Reason: "Event postponed", Count: int(totalCancellations * 20 / 100), Percentage: 20.0},
-		{Reason: "Financial reasons", Count: int(totalCancellations * 15 / 100), Percentage: 15.0},
-		{Reason: "Other", Count: int(totalCancellations * 5 / 100), Percentage: 5.0},
-	}
+	// Note: Cancellation reasons require a reason field in the cancellations table
+	analytics.CancellationReasons = []CancellationReason{}
 
 	// Get cancellation trends
 	var trendData []CancellationTrend
@@ -1189,27 +1172,15 @@ func (r *repository) GetUserAnalytics() (*UserAnalytics, error) {
 		return nil, fmt.Errorf("failed to get user overview: %w", err)
 	}
 
-	retention, err := r.GetUserRetentionMetrics()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user retention: %w", err)
-	}
-
-	demographics, err := r.GetUserDemographics()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user demographics: %w", err)
-	}
-
 	behavior, err := r.GetUserBehaviorAnalytics()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user behavior: %w", err)
 	}
 
 	return &UserAnalytics{
-		Overview:         *overview,
-		RetentionMetrics: *retention,
-		Demographics:     *demographics,
-		Behavior:         *behavior,
-		Insights:         []UserInsight{}, // Populated by service layer
+		Overview: *overview,
+		Behavior: *behavior,
+		Insights: []UserInsight{}, // Populated by service layer
 	}, nil
 }
 
@@ -1306,131 +1277,11 @@ func (r *repository) GetUserOverview() (*UserOverview, error) {
 	return &overview, nil
 }
 
-func (r *repository) GetUserRetentionMetrics() (*UserRetention, error) {
-	var retention UserRetention
-
-	// Calculate retention by period (simplified)
-	retention.RetentionByPeriod = []RetentionPeriod{
-		{Period: "1 month", Percentage: 65.0, UserCount: 650},   // Placeholder
-		{Period: "3 months", Percentage: 45.0, UserCount: 450},  // Placeholder
-		{Period: "6 months", Percentage: 30.0, UserCount: 300},  // Placeholder
-		{Period: "12 months", Percentage: 20.0, UserCount: 200}, // Placeholder
-	}
-
-	// Calculate churn rate (users who haven't booked in 90 days)
-	var totalUsers, inactiveUsers int64
-	err := r.db.Table("bookings").Select("COUNT(DISTINCT user_id)").Scan(&totalUsers).Error
-	if err != nil {
-		return nil, fmt.Errorf("failed to count total users: %w", err)
-	}
-
-	err = r.db.Raw(`
-		SELECT COUNT(DISTINCT user_id)
-		FROM bookings b1
-		WHERE NOT EXISTS (
-			SELECT 1 FROM bookings b2
-			WHERE b2.user_id = b1.user_id
-			AND b2.created_at >= ?
-			AND b2.status = 'CONFIRMED'
-		)
-	`, time.Now().AddDate(0, 0, -90)).Scan(&inactiveUsers).Error
-
-	if err == nil && totalUsers > 0 {
-		retention.ChurnRate = float64(inactiveUsers) / float64(totalUsers) * 100
-	}
-
-	// Calculate lifetime value
-	var avgLifetimeValue float64
-	err = r.db.Raw(`
-		SELECT AVG(user_total)
-		FROM (
-			SELECT SUM(total_price) as user_total
-			FROM bookings
-			WHERE status = 'CONFIRMED'
-			GROUP BY user_id
-		) subq
-	`).Scan(&avgLifetimeValue).Error
-
-	if err == nil {
-		retention.LifetimeValue = avgLifetimeValue
-	}
-
-	// Placeholder cohort data
-	retention.RetentionCohorts = []CohortData{
-		{CohortMonth: "2024-01", CohortSize: 100, Retention: []float64{100, 75, 60, 50, 45, 40}},
-		{CohortMonth: "2024-02", CohortSize: 120, Retention: []float64{100, 80, 65, 55, 50, 45}},
-		{CohortMonth: "2024-03", CohortSize: 150, Retention: []float64{100, 78, 62, 52, 48}},
-	}
-
-	return &retention, nil
-}
-
-func (r *repository) GetUserDemographics() (*UserDemographics, error) {
-	var demographics UserDemographics
-
-	// Since we don't have a detailed users table, we'll create placeholder demographics
-	// In a real implementation, this would query actual user demographic data
-
-	demographics.AgeGroups = []DemographicStat{
-		{Category: "18-25", UserCount: 250, Percentage: 25.0, AvgRevenue: 150.0},
-		{Category: "26-35", UserCount: 400, Percentage: 40.0, AvgRevenue: 200.0},
-		{Category: "36-45", UserCount: 200, Percentage: 20.0, AvgRevenue: 180.0},
-		{Category: "46-55", UserCount: 100, Percentage: 10.0, AvgRevenue: 220.0},
-		{Category: "56+", UserCount: 50, Percentage: 5.0, AvgRevenue: 160.0},
-	}
-
-	demographics.Locations = []LocationStat{
-		{Location: "New York", UserCount: 300, Percentage: 30.0, AvgBookings: 2.5},
-		{Location: "California", UserCount: 250, Percentage: 25.0, AvgBookings: 2.8},
-		{Location: "Texas", UserCount: 150, Percentage: 15.0, AvgBookings: 2.2},
-		{Location: "Florida", UserCount: 120, Percentage: 12.0, AvgBookings: 2.0},
-		{Location: "Other", UserCount: 180, Percentage: 18.0, AvgBookings: 1.8},
-	}
-
-	// Get actual joining periods from bookings (first booking date)
-	var joinedPeriods []PeriodStat
-	err := r.db.Raw(`
-		SELECT 
-			CASE 
-				WHEN first_booking >= ? THEN 'Last 30 days'
-				WHEN first_booking >= ? THEN 'Last 3 months'
-				WHEN first_booking >= ? THEN 'Last 6 months'
-				WHEN first_booking >= ? THEN 'Last year'
-				ELSE 'Over a year'
-			END as period,
-			COUNT(*) as user_count
-		FROM (
-			SELECT user_id, MIN(created_at) as first_booking
-			FROM bookings
-			WHERE status = 'CONFIRMED'
-			GROUP BY user_id
-		) first_bookings
-		GROUP BY period
-	`,
-		time.Now().AddDate(0, 0, -30),
-		time.Now().AddDate(0, -3, 0),
-		time.Now().AddDate(0, -6, 0),
-		time.Now().AddDate(-1, 0, 0),
-	).Scan(&joinedPeriods).Error
-
-	if err == nil {
-		demographics.JoinedPeriods = joinedPeriods
-	}
-
-	demographics.BookingPatterns = []PatternStat{
-		{Pattern: "frequent", UserCount: 150, Revenue: 45000, Percentage: 15.0},
-		{Pattern: "occasional", UserCount: 500, Revenue: 75000, Percentage: 50.0},
-		{Pattern: "one-time", UserCount: 350, Revenue: 35000, Percentage: 35.0},
-	}
-
-	return &demographics, nil
-}
-
 func (r *repository) GetUserBehaviorAnalytics() (*UserBehavior, error) {
 	var behavior UserBehavior
 
-	// Average session time (placeholder)
-	behavior.AvgSessionTime = 1800.0 // 30 minutes in seconds
+	// Note: Session time tracking requires web analytics integration
+	behavior.AvgSessionTime = 0.0
 
 	// Event preferences based on tag popularity
 	var preferences []PreferenceStats
@@ -1473,13 +1324,8 @@ func (r *repository) GetUserBehaviorAnalytics() (*UserBehavior, error) {
 
 	if err == nil {
 		behavior.BookingFrequency = BookingFrequencyStats{
-			AvgBookingsPerMonth: avgBookingsPerMonth,
-			FrequencyDistribution: []FrequencyBucket{
-				{Range: "1", UserCount: 400, Percentage: 40.0, AvgRevenue: 120.0},
-				{Range: "2-3", UserCount: 300, Percentage: 30.0, AvgRevenue: 180.0},
-				{Range: "4-5", UserCount: 200, Percentage: 20.0, AvgRevenue: 250.0},
-				{Range: "6+", UserCount: 100, Percentage: 10.0, AvgRevenue: 400.0},
-			},
+			AvgBookingsPerMonth:   avgBookingsPerMonth,
+			FrequencyDistribution: []FrequencyBucket{}, // Requires user segmentation analysis
 		}
 	}
 
@@ -1493,13 +1339,8 @@ func (r *repository) GetUserBehaviorAnalytics() (*UserBehavior, error) {
 	if err == nil {
 		behavior.PricePreferences = PricePreferenceStats{
 			AvgTicketPrice:   avgTicketPrice,
-			PriceSensitivity: 0.15, // Placeholder
-			PriceRanges: []PriceRange{
-				{Range: "$0-50", UserCount: 300, Percentage: 30.0, AvgBookings: 1.5},
-				{Range: "$51-100", UserCount: 400, Percentage: 40.0, AvgBookings: 2.0},
-				{Range: "$101-200", UserCount: 200, Percentage: 20.0, AvgBookings: 2.5},
-				{Range: "$200+", UserCount: 100, Percentage: 10.0, AvgBookings: 3.0},
-			},
+			PriceSensitivity: 0.0,            // Requires price elasticity analysis
+			PriceRanges:      []PriceRange{}, // Requires price segmentation
 		}
 	}
 
@@ -1516,9 +1357,9 @@ func (r *repository) GetUserBehaviorAnalytics() (*UserBehavior, error) {
 
 	behavior.CancellationBehavior = CancellationBehaviorStats{
 		CancellationRate: cancellationRate,
-		AvgTimeToCancel:  48.0,                                   // Placeholder
-		RepeatCancellers: int(usersWithCancellations * 20 / 100), // Estimate
-		TopCancelReasons: []string{"Schedule conflict", "Personal emergency", "Event postponed"},
+		AvgTimeToCancel:  0.0,        // Requires cancellation timing analysis
+		RepeatCancellers: 0,          // Requires user behavior tracking
+		TopCancelReasons: []string{}, // Requires cancellation reason tracking
 	}
 
 	return &behavior, nil
@@ -1577,8 +1418,8 @@ func (r *repository) GetUserBookingHistory(userID uuid.UUID) (*UserBookingHistor
 		favoriteVenue = "N/A"
 	}
 
-	// For event type, we'd need to look at tags - simplified here
-	favoriteEventType = "Entertainment" // Placeholder
+	// Note: Favorite event type would require tag analytics per user
+	favoriteEventType = "" // Requires tag preference analysis
 
 	history.Overview = UserBookingOverview{
 		TotalBookings:     int(totalBookings),
@@ -1634,13 +1475,13 @@ func (r *repository) GetUserBookingHistory(userID uuid.UUID) (*UserBookingHistor
 		}
 	}
 
-	// User preferences (simplified)
+	// Note: User preferences require detailed preference tracking
 	history.Preferences = UserPreferences{
-		PreferredTags:    []string{"Music", "Entertainment"}, // Placeholder
+		PreferredTags:    []string{}, // Requires tag preference analysis
 		PreferredVenues:  []string{favoriteVenue},
-		PreferredTimes:   []string{"Evening"},
-		PriceRange:       "$50-150",
-		BookingFrequency: "Monthly",
+		PreferredTimes:   []string{}, // Requires time preference analysis
+		PriceRange:       "",         // Requires price range analysis
+		BookingFrequency: "",         // Requires frequency analysis
 	}
 
 	return &history, nil
@@ -1653,7 +1494,8 @@ func (r *repository) GetPersonalAnalytics(userID uuid.UUID) (*PersonalAnalytics,
 	var preferredDay string
 	var advanceBookingTime int
 
-	// Simplified queries for patterns
+	// Get actual preferred day from booking patterns
+	var dayOfWeek int
 	err := r.db.Raw(`
 		SELECT EXTRACT(DOW FROM e.date_time) as day_of_week
 		FROM bookings b
@@ -1662,13 +1504,12 @@ func (r *repository) GetPersonalAnalytics(userID uuid.UUID) (*PersonalAnalytics,
 		GROUP BY EXTRACT(DOW FROM e.date_time)
 		ORDER BY COUNT(*) DESC
 		LIMIT 1
-	`, userID).Scan(&preferredDay).Error
+	`, userID).Scan(&dayOfWeek).Error
 
 	if err == nil {
-		// Convert day number to day name (simplified)
 		days := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
-		if preferredDay != "" {
-			preferredDay = days[0] // Simplified
+		if dayOfWeek >= 0 && dayOfWeek < len(days) {
+			preferredDay = days[dayOfWeek]
 		}
 	}
 
@@ -1681,11 +1522,11 @@ func (r *repository) GetPersonalAnalytics(userID uuid.UUID) (*PersonalAnalytics,
 	`, userID).Scan(&advanceBookingTime).Error
 
 	analytics.BookingPatterns = PersonalBookingPatterns{
-		BookingFrequency:    "Monthly", // Simplified
+		BookingFrequency:    "", // Requires frequency pattern analysis
 		PreferredDay:        preferredDay,
-		PreferredTime:       "Evening", // Placeholder
+		PreferredTime:       "", // Requires time preference analysis
 		AdvanceBookingTime:  advanceBookingTime,
-		SeasonalPreferences: []string{"Summer", "Fall"}, // Placeholder
+		SeasonalPreferences: []string{}, // Requires seasonal analysis
 	}
 
 	// Get spending insights
@@ -1704,9 +1545,9 @@ func (r *repository) GetPersonalAnalytics(userID uuid.UUID) (*PersonalAnalytics,
 	analytics.SpendingInsights = PersonalSpendingInsights{
 		MonthlyAverage:     monthlyAverage,
 		YearOverYearGrowth: yearOverYearGrowth,
-		PeakSpendingMonth:  "December", // Placeholder
-		BudgetSuggestion:   monthlyAverage * 1.1,
-		SavingsOpportunity: monthlyAverage * 0.1,
+		PeakSpendingMonth:  "",  // Requires monthly spending analysis
+		BudgetSuggestion:   0.0, // Requires budget modeling
+		SavingsOpportunity: 0.0, // Requires savings analysis
 	}
 
 	// Recommendations and achievements will be populated by service layer

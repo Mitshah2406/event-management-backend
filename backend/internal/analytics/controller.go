@@ -32,8 +32,6 @@ type Controller interface {
 
 	// User Analytics (new)
 	GetUserAnalytics(c *gin.Context)
-	GetUserRetentionMetrics(c *gin.Context)
-	GetUserDemographics(c *gin.Context)
 
 	// User-facing Analytics
 	GetUserBookingHistory(c *gin.Context)
@@ -185,26 +183,6 @@ func (ctrl *controller) GetUserAnalytics(c *gin.Context) {
 	}
 
 	response.RespondJSON(c, "success", http.StatusOK, "User analytics retrieved successfully", analytics, nil)
-}
-
-func (ctrl *controller) GetUserRetentionMetrics(c *gin.Context) {
-	retention, err := ctrl.service.GetUserRetentionMetrics()
-	if err != nil {
-		response.RespondJSON(c, "error", http.StatusInternalServerError, err.Error(), nil, nil)
-		return
-	}
-
-	response.RespondJSON(c, "success", http.StatusOK, "User retention metrics retrieved successfully", retention, nil)
-}
-
-func (ctrl *controller) GetUserDemographics(c *gin.Context) {
-	demographics, err := ctrl.service.GetUserDemographics()
-	if err != nil {
-		response.RespondJSON(c, "error", http.StatusInternalServerError, err.Error(), nil, nil)
-		return
-	}
-
-	response.RespondJSON(c, "success", http.StatusOK, "User demographics retrieved successfully", demographics, nil)
 }
 
 // User-facing Analytics Implementation

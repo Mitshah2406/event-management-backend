@@ -52,9 +52,7 @@ func setupAdminAnalyticsRoutes(rg *gin.RouterGroup, controller Controller) {
 	// User Analytics
 	users := admin.Group("/users")
 	{
-		users.GET("", controller.GetUserAnalytics)                  // User behavior analytics
-		users.GET("/retention", controller.GetUserRetentionMetrics) // User retention metrics
-		users.GET("/demographics", controller.GetUserDemographics)  // User demographics breakdown
+		users.GET("", controller.GetUserAnalytics) // User behavior analytics
 	}
 }
 

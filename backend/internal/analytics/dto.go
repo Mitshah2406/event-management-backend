@@ -377,11 +377,9 @@ type UserOverview struct {
 }
 
 type UserAnalytics struct {
-	Overview         UserOverview     `json:"overview"`
-	RetentionMetrics UserRetention    `json:"retention_metrics"`
-	Demographics     UserDemographics `json:"demographics"`
-	Behavior         UserBehavior     `json:"behavior"`
-	Insights         []UserInsight    `json:"insights"`
+	Overview UserOverview  `json:"overview"`
+	Behavior UserBehavior  `json:"behavior"`
+	Insights []UserInsight `json:"insights"`
 }
 
 type UserGrowthStats struct {
@@ -397,59 +395,6 @@ type UserSegment struct {
 	Revenue     float64 `json:"revenue"`
 	AvgBookings float64 `json:"avg_bookings"`
 	Percentage  float64 `json:"percentage"`
-}
-
-type UserRetention struct {
-	RetentionByPeriod []RetentionPeriod `json:"retention_by_period"`
-	ChurnRate         float64           `json:"churn_rate"`
-	LifetimeValue     float64           `json:"lifetime_value"`
-	RetentionCohorts  []CohortData      `json:"retention_cohorts"`
-}
-
-type RetentionPeriod struct {
-	Period     string  `json:"period"` // "1 month", "3 months", "6 months"
-	Percentage float64 `json:"percentage"`
-	UserCount  int     `json:"user_count"`
-}
-
-type CohortData struct {
-	CohortMonth string    `json:"cohort_month"`
-	CohortSize  int       `json:"cohort_size"`
-	Retention   []float64 `json:"retention"` // Retention % for each subsequent month
-}
-
-type UserDemographics struct {
-	AgeGroups       []DemographicStat `json:"age_groups"`
-	Locations       []LocationStat    `json:"locations"`
-	JoinedPeriods   []PeriodStat      `json:"joined_periods"`
-	BookingPatterns []PatternStat     `json:"booking_patterns"`
-}
-
-type DemographicStat struct {
-	Category   string  `json:"category"`
-	UserCount  int     `json:"user_count"`
-	Percentage float64 `json:"percentage"`
-	AvgRevenue float64 `json:"avg_revenue"`
-}
-
-type LocationStat struct {
-	Location    string  `json:"location"`
-	UserCount   int     `json:"user_count"`
-	Percentage  float64 `json:"percentage"`
-	AvgBookings float64 `json:"avg_bookings"`
-}
-
-type PeriodStat struct {
-	Period      string  `json:"period"`
-	UserCount   int     `json:"user_count"`
-	RetainedPct float64 `json:"retained_percentage"`
-}
-
-type PatternStat struct {
-	Pattern    string  `json:"pattern"` // "frequent", "occasional", "one-time"
-	UserCount  int     `json:"user_count"`
-	Revenue    float64 `json:"revenue"`
-	Percentage float64 `json:"percentage"`
 }
 
 type UserBehavior struct {

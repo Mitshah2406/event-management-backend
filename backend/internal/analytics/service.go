@@ -33,8 +33,6 @@ type Service interface {
 
 	// User Analytics (new)
 	GetUserAnalytics() (*UserAnalytics, error)
-	GetUserRetentionMetrics() (*UserRetention, error)
-	GetUserDemographics() (*UserDemographics, error)
 
 	// User-facing Analytics
 	GetUserBookingHistory(userID uuid.UUID) (*UserBookingHistory, error)
@@ -250,30 +248,6 @@ func (s *service) GetUserAnalytics() (*UserAnalytics, error) {
 	return analytics, nil
 }
 
-func (s *service) GetUserRetentionMetrics() (*UserRetention, error) {
-	retention, err := s.repo.GetUserRetentionMetrics()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user retention metrics: %w", err)
-	}
-
-	// Add retention analysis logic
-	// For example, calculating cohort performance, churn prediction, etc.
-
-	return retention, nil
-}
-
-func (s *service) GetUserDemographics() (*UserDemographics, error) {
-	demographics, err := s.repo.GetUserDemographics()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user demographics: %w", err)
-	}
-
-	// Add demographic analysis logic
-	// For example, calculating segment performance, identifying opportunities, etc.
-
-	return demographics, nil
-}
-
 // User-facing Analytics Implementation
 
 func (s *service) GetUserBookingHistory(userID uuid.UUID) (*UserBookingHistory, error) {
@@ -361,26 +335,26 @@ func (s *service) generateBookingInsights(analytics *BookingAnalytics) []Booking
 func (s *service) generateUserInsights(analytics *UserAnalytics) []UserInsight {
 	var insights []UserInsight
 
-	// Example user insight generation
-	if analytics.RetentionMetrics.ChurnRate > 25.0 {
+	// Generate insights based on available data
+	if analytics.Overview.RetentionRate < 50.0 {
 		insights = append(insights, UserInsight{
-			Type:        "risk",
-			Title:       "High Churn Rate",
-			Description: fmt.Sprintf("User churn rate is %.1f%%, indicating retention challenges", analytics.RetentionMetrics.ChurnRate),
-			UserCount:   int(analytics.RetentionMetrics.ChurnRate * float64(analytics.Overview.TotalUsers) / 100),
-			Impact:      "high",
-			Action:      "Implement retention campaigns and improve user engagement",
+			Type:        "opportunity",
+			Title:       "User Retention Opportunity",
+			Description: fmt.Sprintf("User retention rate is %.1f%%, consider implementing engagement campaigns", analytics.Overview.RetentionRate),
+			UserCount:   analytics.Overview.TotalUsers - analytics.Overview.ActiveUsers,
+			Impact:      "medium",
+			Action:      "Implement user engagement and retention strategies",
 		})
 	}
 
-	if analytics.RetentionMetrics.LifetimeValue > 500.0 {
+	if analytics.Overview.AvgBookingsPerUser < 2.0 {
 		insights = append(insights, UserInsight{
 			Type:        "opportunity",
-			Title:       "High User Lifetime Value",
-			Description: fmt.Sprintf("Average user lifetime value is $%.0f, indicating strong user engagement", analytics.RetentionMetrics.LifetimeValue),
+			Title:       "Low Booking Frequency",
+			Description: fmt.Sprintf("Average bookings per user is %.1f, focus on repeat engagement", analytics.Overview.AvgBookingsPerUser),
 			UserCount:   analytics.Overview.TotalUsers,
-			Impact:      "high",
-			Action:      "Focus on acquiring similar high-value user segments",
+			Impact:      "medium",
+			Action:      "Develop loyalty programs and targeted recommendations",
 		})
 	}
 
