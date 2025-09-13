@@ -2,6 +2,7 @@ package seats
 
 import (
 	"evently/internal/shared/utils/response"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -210,7 +211,8 @@ func (c *Controller) GetAvailableSeatsInSection(ctx *gin.Context) {
 		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Event ID is required", nil, "missing event_id query parameter")
 		return
 	}
-
+	log.Default().Println("Event ID for availability check:", eventID)
+	log.Default().Println("Section ID for availability check:", sectionID)
 	seats, err := c.service.GetAvailableSeatsInSectionForEvent(ctx.Request.Context(), sectionID, eventID)
 	if err != nil {
 		response.RespondJSON(ctx, "error", http.StatusInternalServerError, "Failed to get available seats", nil, err.Error())

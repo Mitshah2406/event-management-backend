@@ -14,8 +14,8 @@ import (
 )
 
 func Migrate(db *gorm.DB) error {
-
-	return db.AutoMigrate(
+	// Run auto-migration first
+	err := db.AutoMigrate(
 		// Users first
 		&users.User{},
 
@@ -48,4 +48,10 @@ func Migrate(db *gorm.DB) error {
 		&waitlist.WaitlistNotification{},
 		&waitlist.WaitlistAnalytics{},
 	)
+	if err != nil {
+		return err
+	}
+
+	// Add critical constraints for concurrency control
+	return MigrateConstraints(db)
 }

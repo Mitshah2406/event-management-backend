@@ -8,6 +8,7 @@ type BookingConfirmationResponse struct {
 	Status     string           `json:"status"`
 	TotalPrice float64          `json:"total_price"`
 	TotalSeats int              `json:"total_seats"`
+	Version    int              `json:"version"`
 	Seats      []BookedSeatInfo `json:"seats"`
 	Payment    PaymentInfo      `json:"payment"`
 	CreatedAt  time.Time        `json:"created_at"`

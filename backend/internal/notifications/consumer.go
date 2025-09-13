@@ -63,6 +63,7 @@ type KafkaNotificationConsumer struct {
 	handlersMu    sync.RWMutex
 	topics        []string
 	ready         chan bool
+	readyOnce     sync.Once
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
@@ -157,9 +158,10 @@ func (knc *KafkaNotificationConsumer) StartConsumers(ctx context.Context, numWor
 // runWorker runs a single consumer worker
 func (knc *KafkaNotificationConsumer) runWorker(ctx context.Context, workerID int) {
 	consumer := &ConsumerGroupHandler{
-		consumer: knc,
-		workerID: workerID,
-		ready:    knc.ready,
+		consumer:  knc,
+		workerID:  workerID,
+		ready:     knc.ready,
+		readyOnce: &knc.readyOnce,
 	}
 
 	for {
@@ -220,15 +222,19 @@ func (knc *KafkaNotificationConsumer) HealthCheck(ctx context.Context) error {
 
 // ConsumerGroupHandler implements sarama.ConsumerGroupHandler
 type ConsumerGroupHandler struct {
-	consumer *KafkaNotificationConsumer
-	workerID int
-	ready    chan bool
+	consumer  *KafkaNotificationConsumer
+	workerID  int
+	ready     chan bool
+	readyOnce *sync.Once
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
 func (h *ConsumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
 	log.Printf("📥 Worker %d: Consumer group session started", h.workerID)
-	close(h.ready)
+	// Use sync.Once to ensure the ready channel is only closed once
+	h.readyOnce.Do(func() {
+		close(h.ready)
+	})
 	return nil
 }
 

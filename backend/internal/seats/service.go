@@ -207,12 +207,12 @@ func (s *service) HoldSeats(ctx context.Context, req SeatHoldRequest) (*SeatHold
 		return nil, fmt.Errorf("failed to get seat details: %w", err)
 	}
 
-	// Generate hold ID and hold seats in Redis
+	// Generate hold ID and hold seats in Redis atomically
 	holdID := uuid.New().String()
 	ttl := s.config.Redis.SeatHoldTTL // Use configurable TTL
 	logger.GetDefault().Info("Holding seats with hold ID:", holdID, "for user:", req.UserID, "with TTL:", ttl)
-	if err := s.repo.HoldSeats(ctx, seatUUIDs, req.UserID, holdID, req.EventID, ttl); err != nil {
-		return nil, fmt.Errorf("failed to hold seats: %w", err)
+	if err := s.repo.AtomicHoldSeats(ctx, seatUUIDs, req.UserID, holdID, req.EventID, ttl); err != nil {
+		return nil, fmt.Errorf("failed to hold seats atomically: %w", err)
 	}
 
 	// Build response
@@ -365,6 +365,7 @@ func (s *service) GetAvailableSeatsInSection(ctx context.Context, sectionID stri
 }
 
 func (s *service) GetAvailableSeatsInSectionForEvent(ctx context.Context, sectionID string, eventID string) ([]SeatResponse, error) {
+	logger.GetDefault().Info("Fetching available seats for section:", sectionID, "and event:", eventID)
 	sectionUUID, err := uuid.Parse(sectionID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid section ID: %w", err)

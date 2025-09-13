@@ -338,12 +338,17 @@ func (b *BookingServiceAdapter) GetBooking(ctx context.Context, bookingID uuid.U
 		TotalSeats: booking.TotalSeats,
 		Status:     booking.Status,
 		BookingRef: booking.BookingRef,
+		Version:    booking.Version,
 		CreatedAt:  booking.CreatedAt,
 	}, nil
 }
 
 func (b *BookingServiceAdapter) CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error {
 	return b.bookingService.CancelBookingInternal(ctx, bookingID)
+}
+
+func (b *BookingServiceAdapter) CancelBookingWithVersion(ctx context.Context, bookingID uuid.UUID, expectedVersion int) error {
+	return b.bookingService.CancelBookingWithVersion(ctx, bookingID, expectedVersion)
 }
 
 // WaitlistServiceAdapter adapts waitlist.Service to cancellation.WaitlistService interface

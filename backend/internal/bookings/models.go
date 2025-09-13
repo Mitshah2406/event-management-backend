@@ -15,6 +15,7 @@ type Booking struct {
 	TotalPrice  float64    `gorm:"not null" json:"total_price"`
 	Status      string     `gorm:"type:varchar(20);check:status IN ('CONFIRMED', 'CANCELLED');default:'CONFIRMED';index" json:"status"`
 	BookingRef  string     `gorm:"unique;not null" json:"booking_ref"`
+	Version     int        `gorm:"not null;default:1" json:"version"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
@@ -28,7 +29,8 @@ type Booking struct {
 type SeatBooking struct {
 	ID        uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	BookingID uuid.UUID `gorm:"type:uuid;index;not null" json:"booking_id"`
-	SeatID    uuid.UUID `gorm:"type:uuid;index;not null" json:"seat_id"`
+	EventID   uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_unique_seat_event" json:"event_id"`
+	SeatID    uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_unique_seat_event" json:"seat_id"`
 	SectionID uuid.UUID `gorm:"type:uuid;not null" json:"section_id"`
 	SeatPrice float64   `gorm:"not null" json:"seat_price"`
 	CreatedAt time.Time `json:"created_at"`

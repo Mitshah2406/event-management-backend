@@ -28,7 +28,9 @@ type Repository interface {
 
 	// Redis seat holding operations
 	HoldSeats(ctx context.Context, seatIDs []uuid.UUID, userID, holdID, eventID string, ttl time.Duration) error
+	AtomicHoldSeats(ctx context.Context, seatIDs []uuid.UUID, userID, holdID, eventID string, ttl time.Duration) error
 	ReleaseHold(ctx context.Context, holdID string) error
+	AtomicReleaseHold(ctx context.Context, holdID string) (int, error)
 	CheckSeatHolds(ctx context.Context, seatIDs []uuid.UUID) (map[string]string, error) // seatID -> holdID
 	GetUserHolds(ctx context.Context, userID string) ([]string, error)                  // returns holdIDs
 	IsHoldValid(ctx context.Context, holdID string) (bool, error)
@@ -36,14 +38,17 @@ type Repository interface {
 }
 
 type repository struct {
-	db    *gorm.DB
-	redis *redis.Client
+	db          *gorm.DB
+	redis       *redis.Client
+	atomicRedis *AtomicRedisOperations
 }
 
 func NewRepository(db *gorm.DB, redisClient *redis.Client) Repository {
+	atomicRedis := NewAtomicRedisOperations(redisClient)
 	return &repository{
-		db:    db,
-		redis: redisClient,
+		db:          db,
+		redis:       redisClient,
+		atomicRedis: atomicRedis,
 	}
 }
 
@@ -133,86 +138,32 @@ func (r *repository) GetAvailableSeatsInSection(ctx context.Context, sectionID u
 // REDIS SEAT HOLDING
 
 func (r *repository) HoldSeats(ctx context.Context, seatIDs []uuid.UUID, userID, holdID, eventID string, ttl time.Duration) error {
-	// If Redis is not available, skip holding for now
-	if r.redis == nil {
-		return fmt.Errorf("redis client not available - seat holding disabled")
+	// Use atomic version for better concurrency control
+	return r.AtomicHoldSeats(ctx, seatIDs, userID, holdID, eventID, ttl)
+}
+
+// AtomicHoldSeats provides atomic seat holding using Lua scripts
+func (r *repository) AtomicHoldSeats(ctx context.Context, seatIDs []uuid.UUID, userID, holdID, eventID string, ttl time.Duration) error {
+	if r.atomicRedis == nil {
+		return fmt.Errorf("atomic redis operations not available - seat holding disabled")
 	}
 
-	pipe := r.redis.TxPipeline()
-
-	// Create hold metadata
-	holdKey := fmt.Sprintf("hold:%s", holdID)
-	holdData := map[string]interface{}{
-		"user_id":    userID,
-		"event_id":   eventID,
-		"seat_count": len(seatIDs),
-		"created_at": time.Now().Unix(),
-		"expires_at": time.Now().Add(ttl).Unix(),
-	}
-	pipe.HMSet(ctx, holdKey, holdData)
-	pipe.Expire(ctx, holdKey, ttl)
-
-	// Hold individual seats
-	for _, seatID := range seatIDs {
-		seatHoldKey := fmt.Sprintf("seat_hold:%s", seatID.String())
-		holdValue := fmt.Sprintf("%s:%s", userID, holdID)
-
-		// Use SETNX to ensure atomic seat holding
-		pipe.SetNX(ctx, seatHoldKey, holdValue, ttl)
-
-		// Add seat to hold set
-		pipe.SAdd(ctx, fmt.Sprintf("hold_seats:%s", holdID), seatID.String())
-		pipe.Expire(ctx, fmt.Sprintf("hold_seats:%s", holdID), ttl)
-	}
-
-	// Add to user's holds
-	userHoldsKey := fmt.Sprintf("user_holds:%s", userID)
-	pipe.SAdd(ctx, userHoldsKey, holdID)
-	pipe.Expire(ctx, userHoldsKey, ttl)
-
-	_, err := pipe.Exec(ctx)
-	return err
+	return r.atomicRedis.AtomicHoldSeats(ctx, seatIDs, userID, holdID, eventID, ttl)
 }
 
 func (r *repository) ReleaseHold(ctx context.Context, holdID string) error {
-	if r.redis == nil {
-		return fmt.Errorf("redis client not available - seat holding disabled")
-	}
-
-	pipe := r.redis.TxPipeline()
-
-	// Get seats in this hold
-	holdSeatsKey := fmt.Sprintf("hold_seats:%s", holdID)
-	seatIDs, err := r.redis.SMembers(ctx, holdSeatsKey).Result()
-	if err != nil && err != redis.Nil {
-		return err
-	}
-
-	// Get hold metadata to find user
-	holdKey := fmt.Sprintf("hold:%s", holdID)
-	holdData, err := r.redis.HGetAll(ctx, holdKey).Result()
-	if err != nil && err != redis.Nil {
-		return err
-	}
-
-	// Release individual seat holds
-	for _, seatID := range seatIDs {
-		seatHoldKey := fmt.Sprintf("seat_hold:%s", seatID)
-		pipe.Del(ctx, seatHoldKey)
-	}
-
-	// Remove from user's holds if user data available
-	if userID, exists := holdData["user_id"]; exists {
-		userHoldsKey := fmt.Sprintf("user_holds:%s", userID)
-		pipe.SRem(ctx, userHoldsKey, holdID)
-	}
-
-	// Clean up hold metadata
-	pipe.Del(ctx, holdKey)
-	pipe.Del(ctx, holdSeatsKey)
-
-	_, err = pipe.Exec(ctx)
+	// Use atomic version for better consistency
+	_, err := r.AtomicReleaseHold(ctx, holdID)
 	return err
+}
+
+// AtomicReleaseHold provides atomic hold release using Lua scripts
+func (r *repository) AtomicReleaseHold(ctx context.Context, holdID string) (int, error) {
+	if r.atomicRedis == nil {
+		return 0, fmt.Errorf("atomic redis operations not available - seat holding disabled")
+	}
+
+	return r.atomicRedis.AtomicReleaseHold(ctx, holdID)
 }
 
 func (r *repository) CheckSeatHolds(ctx context.Context, seatIDs []uuid.UUID) (map[string]string, error) {

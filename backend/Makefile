@@ -21,6 +21,7 @@
   prod-redis-info \
   prod-connect-db \
   prod-connect-redis \
+  seed \
   help
 
 build: ## Build the application for production
@@ -234,5 +235,29 @@ prod-connect-redis: ## Connect to production Redis via CLI
 	else \
 		docker exec -it evently_redis redis-cli; \
 	fi
+
+# Database seeding
+seed: ## Seed the database with sample data (cleans DB first)
+	@echo "🌱 Seeding database with sample data..."
+	@echo ""
+	@echo "⚠️  WARNING: This will clean the entire database and insert fresh seed data!"
+	@echo "   This action is irreversible and will delete all existing data."
+	@echo ""
+	@read -p "Are you sure you want to continue? (y/N): " confirm && [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ] || exit 1
+	@echo ""
+	go run cmd/seed/main.go
+	@echo ""
+	@echo "🎉 Database seeded successfully!"
+	@echo ""
+	@echo "📊 Seed Data Summary:"
+	@echo "   👤 Users: 3 (1 admin, 2 regular users)"
+	@echo "   🏟️  Venue Templates: 2 (Small Theater, Conference Hall)"
+	@echo "   🎪 Events: 6 (upcoming events with different pricing)"
+	@echo "   📋 Cancellation Policies: 6 (different policy types)"
+	@echo ""
+	@echo "🔑 Login Credentials:"
+	@echo "   Admin: admin@gmail.com / qwerty"
+	@echo "   User1: mitshah2406@gmail.com / qwerty"
+	@echo "   User2: mitshah2406.work@gmail.com / qwerty"
 
 .DEFAULT_GOAL := help

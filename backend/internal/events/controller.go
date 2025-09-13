@@ -60,7 +60,7 @@ func (ctrl *controller) CreateEvent(c *gin.Context) {
 }
 
 func (ctrl *controller) GetEvent(c *gin.Context) {
-	eventIDStr := c.Param("id")
+	eventIDStr := c.Param("eventId")
 	eventID, err := uuid.Parse(eventIDStr)
 	if err != nil {
 		response.RespondJSON(c, "error", http.StatusBadRequest, "Invalid event ID", nil, err.Error())
@@ -81,7 +81,7 @@ func (ctrl *controller) GetEvent(c *gin.Context) {
 }
 
 func (ctrl *controller) UpdateEvent(c *gin.Context) {
-	eventIDStr := c.Param("id")
+	eventIDStr := c.Param("eventId")
 	eventID, err := uuid.Parse(eventIDStr)
 	if err != nil {
 		response.RespondJSON(c, "error", http.StatusBadRequest, "Invalid event ID", nil, err.Error())
@@ -122,7 +122,7 @@ func (ctrl *controller) UpdateEvent(c *gin.Context) {
 }
 
 func (ctrl *controller) DeleteEvent(c *gin.Context) {
-	eventIDStr := c.Param("id")
+	eventIDStr := c.Param("eventId")
 	eventID, err := uuid.Parse(eventIDStr)
 	if err != nil {
 		response.RespondJSON(c, "error", http.StatusBadRequest, "Invalid event ID", nil, err.Error())
@@ -174,7 +174,7 @@ func (ctrl *controller) GetAllEvents(c *gin.Context) {
 }
 
 func (ctrl *controller) GetEventAnalytics(c *gin.Context) {
-	eventIDStr := c.Param("id")
+	eventIDStr := c.Param("eventId")
 	eventID, err := uuid.Parse(eventIDStr)
 	if err != nil {
 		response.RespondJSON(c, "error", http.StatusBadRequest, "Invalid event ID", nil, err.Error())

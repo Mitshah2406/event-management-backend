@@ -17,6 +17,18 @@ type TagInfo struct {
 	Color string `json:"color"`
 }
 
+// VenueSection represents venue section information for event responses
+type VenueSection struct {
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	RowStart        string  `json:"row_start"`
+	RowEnd          string  `json:"row_end"`
+	SeatsPerRow     int     `json:"seats_per_row"`
+	TotalSeats      int     `json:"total_seats"`
+	PriceMultiplier float64 `json:"price_multiplier,omitempty"`
+	Price           float64 `json:"price,omitempty"`
+}
 
 type Event struct {
 	ID              uuid.UUID   `json:"id" gorm:"type:uuid;default:uuid_generate_v4();primaryKey"`
@@ -39,32 +51,33 @@ type Event struct {
 }
 
 type EventResponse struct {
-	ID               string      `json:"id"`
-	Name             string      `json:"name"`
-	Description      string      `json:"description"`
-	Venue            string      `json:"venue"`
-	VenueTemplateID  string      `json:"venue_template_id"`
-	DateTime         time.Time   `json:"date_time"`
-	TotalCapacity    int         `json:"total_capacity"`    // Calculated from venue sections
-	BookedCount      int         `json:"booked_count"`      // Calculated from seat bookings
-	AvailableTickets int         `json:"available_tickets"` // Calculated
-	BasePrice        float64     `json:"base_price"`
-	Status           EventStatus `json:"status"`
-	ImageURL         string      `json:"image_url"`
-	Tags             []TagInfo   `json:"tags"`
-	CreatedAt        time.Time   `json:"created_at"`
-	UpdatedAt        time.Time   `json:"updated_at"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Description      string         `json:"description"`
+	Venue            string         `json:"venue"`
+	VenueTemplateID  string         `json:"venue_template_id"`
+	VenueSections    []VenueSection `json:"venue_sections,omitempty"` // Added venue sections
+	DateTime         time.Time      `json:"date_time"`
+	TotalCapacity    int            `json:"total_capacity"`    // Calculated from venue sections
+	BookedCount      int            `json:"booked_count"`      // Calculated from seat bookings
+	AvailableTickets int            `json:"available_tickets"` // Calculated
+	BasePrice        float64        `json:"base_price"`
+	Status           EventStatus    `json:"status"`
+	ImageURL         string         `json:"image_url"`
+	Tags             []TagInfo      `json:"tags"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
 }
 
 type CreateEventRequest struct {
-	Name            string                       `json:"name" binding:"required,min=3,max=255"`
-	Description     string                       `json:"description" binding:"max=2000"`
-	Venue           string                       `json:"venue" binding:"required,min=3,max=255"`
-	VenueTemplateID string                       `json:"venue_template_id" binding:"required,uuid"`
-	DateTime        time.Time                    `json:"date_time" binding:"required"`
-	BasePrice       float64                      `json:"base_price" binding:"required,min=0"`
-	ImageURL        string                       `json:"image_url" binding:"omitempty,url"`
-	Tags            []string                     `json:"tags"`
+	Name            string                      `json:"name" binding:"required,min=3,max=255"`
+	Description     string                      `json:"description" binding:"max=2000"`
+	Venue           string                      `json:"venue" binding:"required,min=3,max=255"`
+	VenueTemplateID string                      `json:"venue_template_id" binding:"required,uuid"`
+	DateTime        time.Time                   `json:"date_time" binding:"required"`
+	BasePrice       float64                     `json:"base_price" binding:"required,min=0"`
+	ImageURL        string                      `json:"image_url" binding:"omitempty,url"`
+	Tags            []string                    `json:"tags"`
 	SectionPricing  []CreateEventSectionPricing `json:"section_pricing" binding:"required,min=1"`
 }
 
@@ -155,6 +168,7 @@ func (e *Event) ToResponse() EventResponse {
 		Description:      e.Description,
 		Venue:            e.Venue,
 		VenueTemplateID:  e.VenueTemplateID.String(),
+		VenueSections:    []VenueSection{}, // Will be populated by service layer
 		DateTime:         e.DateTime,
 		TotalCapacity:    0, // Will be calculated by service layer
 		BookedCount:      0, // Will be calculated by service layer
