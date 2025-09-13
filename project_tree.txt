@@ -20,13 +20,9 @@
 │   │   │   ├── docker-compose.prod.yml
 │   │   │   ├── Dockerfile.dev
 │   │   │   ├── Dockerfile.prod
-│   │   │   ├── init.sql
-│   │   │   └── nginx.prod.conf
+│   │   │   └── init.sql
 │   │   └── k8s
 │   ├── docs
-│   │   ├── DEPLOYMENT_GUIDE.md
-│   │   ├── README.md
-│   │   ├── SWAGGER_SETUP_SUMMARY.md
 │   │   └── swagger.yaml
 │   ├── emailtest.txt
 │   ├── evently_cache_test.log
@@ -136,10 +132,6 @@
 │   │   └── ratelimit
 │   │       ├── middleware.go
 │   │       └── rate_limiter.go
-│   ├── scripts
-│   │   ├── deploy.sh
-│   │   ├── maintenance.sh
-│   │   └── server-setup.sh
 │   ├── server
 │   │   └── main.go
 │   ├── test1.go.txt
@@ -151,4 +143,4 @@
 ├── Evently-Task.txt
 └── project_tree.txt
 
-40 directories, 112 files
+39 directories, 105 files
