@@ -36,6 +36,9 @@
 │   │   │   └── service.go
 │   │   ├── auth
 │   │   │   ├── controller.go
+│   │   │   ├── dto
+│   │   │   │   ├── request.go
+│   │   │   │   └── response.go
 │   │   │   ├── models.go
 │   │   │   ├── repository.go
 │   │   │   ├── router.go
@@ -93,11 +96,13 @@
 │   │   │   ├── controller.go
 │   │   │   ├── models.go
 │   │   │   ├── repository.go
+│   │   │   ├── request-dto.go
+│   │   │   ├── response-dto.go
 │   │   │   ├── router.go
 │   │   │   └── service.go
 │   │   ├── users
-│   │   │   ├── models.go
-│   │   │   └── roles.go
+│   │   │   ├── enums.go
+│   │   │   └── models.go
 │   │   ├── venues
 │   │   │   ├── controller.go
 │   │   │   ├── models.go
@@ -134,4 +139,4 @@
 ├── Evently-Task.txt
 └── project_tree.txt
 
-40 directories, 95 files
+41 directories, 99 files

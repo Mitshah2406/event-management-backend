@@ -3,7 +3,6 @@ package tags
 import (
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -12,7 +11,6 @@ import (
 )
 
 type Controller interface {
-	// Admin CRUD operations
 	CreateTag(c *gin.Context)
 	GetTag(c *gin.Context)
 	GetTagBySlug(c *gin.Context)
@@ -20,12 +18,6 @@ type Controller interface {
 	DeleteTag(c *gin.Context)
 	GetAllTags(c *gin.Context)
 	GetActiveTags(c *gin.Context)
-
-	// Analytics operations (admin only)
-	GetTagAnalytics(c *gin.Context)
-	GetTagPopularityAnalytics(c *gin.Context)
-	GetTagTrends(c *gin.Context)
-	GetTagComparisons(c *gin.Context)
 }
 
 type controller struct {
@@ -35,8 +27,6 @@ type controller struct {
 func NewController(service Service) Controller {
 	return &controller{service: service}
 }
-
-// Admin CRUD operations
 
 func (ctrl *controller) CreateTag(c *gin.Context) {
 	var req CreateTagRequest
@@ -215,52 +205,4 @@ func (ctrl *controller) GetActiveTags(c *gin.Context) {
 	}
 
 	response.RespondJSON(c, "success", http.StatusOK, "Active tags retrieved successfully", tags, nil)
-}
-
-// Analytics operations
-
-func (ctrl *controller) GetTagAnalytics(c *gin.Context) {
-	analytics, err := ctrl.service.GetTagAnalytics()
-	if err != nil {
-		response.RespondJSON(c, "error", http.StatusInternalServerError, err.Error(), nil, nil)
-		return
-	}
-
-	response.RespondJSON(c, "success", http.StatusOK, "Tag analytics retrieved successfully", analytics, nil)
-}
-
-func (ctrl *controller) GetTagPopularityAnalytics(c *gin.Context) {
-	analytics, err := ctrl.service.GetTagPopularityAnalytics()
-	if err != nil {
-		response.RespondJSON(c, "error", http.StatusInternalServerError, err.Error(), nil, nil)
-		return
-	}
-
-	response.RespondJSON(c, "success", http.StatusOK, "Tag popularity analytics retrieved successfully", analytics, nil)
-}
-
-func (ctrl *controller) GetTagTrends(c *gin.Context) {
-	monthsStr := c.DefaultQuery("months", "6")
-	months, err := strconv.Atoi(monthsStr)
-	if err != nil || months <= 0 {
-		months = 6 // Default to 6 months
-	}
-
-	trends, err := ctrl.service.GetTagTrends(months)
-	if err != nil {
-		response.RespondJSON(c, "error", http.StatusInternalServerError, err.Error(), nil, nil)
-		return
-	}
-
-	response.RespondJSON(c, "success", http.StatusOK, "Tag trends retrieved successfully", trends, nil)
-}
-
-func (ctrl *controller) GetTagComparisons(c *gin.Context) {
-	comparisons, err := ctrl.service.GetTagComparisons()
-	if err != nil {
-		response.RespondJSON(c, "error", http.StatusInternalServerError, err.Error(), nil, nil)
-		return
-	}
-
-	response.RespondJSON(c, "success", http.StatusOK, "Tag comparisons retrieved successfully", comparisons, nil)
 }

@@ -20,7 +20,6 @@ func NewController(service Service) *Controller {
 	}
 }
 
-// Register handles user registration
 func (c *Controller) Register(ctx *gin.Context) {
 	var req RegisterRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -47,7 +46,6 @@ func (c *Controller) Register(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusCreated, "User registered successfully", resp, nil)
 }
 
-// Login handles user login
 func (c *Controller) Login(ctx *gin.Context) {
 	var req LoginRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -74,7 +72,6 @@ func (c *Controller) Login(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Login successful", resp, nil)
 }
 
-// RefreshToken handles token refresh
 func (c *Controller) RefreshToken(ctx *gin.Context) {
 	var req RefreshTokenRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -103,16 +100,13 @@ func (c *Controller) RefreshToken(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Token refreshed successfully", tokenPair, nil)
 }
 
-// Logout handles user logout
 func (c *Controller) Logout(ctx *gin.Context) {
 	var req LogoutRequest
 	ctx.ShouldBindJSON(&req) // Optional body
 
-	// For now, logout is mainly client-side
 	response.RespondJSON(ctx, "success", http.StatusOK, "Logged out successfully", nil, nil)
 }
 
-// ChangePassword handles password change
 func (c *Controller) ChangePassword(ctx *gin.Context) {
 	userID, exists := ctx.Get("user_id")
 	if !exists {
@@ -147,7 +141,6 @@ func (c *Controller) ChangePassword(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Password changed successfully", nil, nil)
 }
 
-// GetMe returns current user information
 func (c *Controller) GetMe(ctx *gin.Context) {
 	userID, exists := ctx.Get("user_id")
 	if !exists {

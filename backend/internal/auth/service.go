@@ -43,7 +43,6 @@ func NewService(repo Repository, cfg *config.Config) Service {
 	}
 }
 
-// Register creates a new user account
 func (s *service) Register(ctx context.Context, req *RegisterRequest) (*AuthResponse, error) {
 	// Check if user already exists
 	exists, err := s.repo.EmailExists(ctx, req.Email)
@@ -65,7 +64,7 @@ func (s *service) Register(ctx context.Context, req *RegisterRequest) (*AuthResp
 	if role == "" {
 		role = string(users.RoleUser)
 	}
-	role = strings.ToUpper(role)
+	role = strings.ToUpper(role) // stored as uppercase enum
 	// Validate role
 	if !users.IsValidRole(role) {
 		role = string(users.RoleUser)
@@ -106,7 +105,6 @@ func (s *service) Register(ctx context.Context, req *RegisterRequest) (*AuthResp
 	}, nil
 }
 
-// Login authenticates a user and returns tokens
 func (s *service) Login(ctx context.Context, req *LoginRequest) (*AuthResponse, error) {
 	user, err := s.repo.GetUserByEmail(ctx, req.Email)
 	if err != nil {
@@ -143,7 +141,6 @@ func (s *service) Login(ctx context.Context, req *LoginRequest) (*AuthResponse, 
 	}, nil
 }
 
-// RefreshToken generates new tokens using refresh token
 func (s *service) RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error) {
 	claims, err := s.validateToken(refreshToken)
 	if err != nil {
@@ -169,7 +166,6 @@ func (s *service) RefreshToken(ctx context.Context, refreshToken string) (*Token
 	return tokenPair, nil
 }
 
-// ChangePassword changes user password
 func (s *service) ChangePassword(ctx context.Context, userID string, req *ChangePasswordRequest) error {
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil {
@@ -191,12 +187,10 @@ func (s *service) ChangePassword(ctx context.Context, userID string, req *Change
 	return s.repo.UpdateUserPassword(ctx, userID, string(hashedPassword))
 }
 
-// ValidateToken validates JWT token and returns claims
 func (s *service) ValidateToken(tokenString string) (*JWTClaims, error) {
 	return s.validateToken(tokenString)
 }
 
-// generateTokenPair creates access and refresh tokens
 func (s *service) generateTokenPair(userID, email, role string) (*TokenPair, error) {
 	now := time.Now()
 
@@ -244,11 +238,10 @@ func (s *service) generateTokenPair(userID, email, role string) (*TokenPair, err
 	return &TokenPair{
 		AccessToken:  accessTokenString,
 		RefreshToken: refreshTokenString,
-		ExpiresIn:    int64(s.config.JWT.JWTExpiresIn.Seconds()), // 15 minutes in seconds
+		ExpiresIn:    int64(s.config.JWT.JWTExpiresIn.Seconds()),
 	}, nil
 }
 
-// validateToken validates JWT token and returns claims
 func (s *service) validateToken(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

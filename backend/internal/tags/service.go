@@ -2,11 +2,9 @@ package tags
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"strings"
 	"time"
 
@@ -19,7 +17,6 @@ import (
 )
 
 type Service interface {
-	// Admin CRUD operations
 	CreateTag(adminID uuid.UUID, req CreateTagRequest) (*TagResponse, error)
 	GetTagByID(id uuid.UUID) (*TagResponse, error)
 	GetTagBySlug(slug string) (*TagResponse, error)
@@ -28,18 +25,11 @@ type Service interface {
 	GetAllTags(query TagListQuery) (*PaginatedTags, error)
 	GetActiveTags() ([]TagResponse, error)
 
-	// Tag assignment operations (called by event service)
 	AssignTagsToEvent(eventID uuid.UUID, tagNames []string) error
 	RemoveTagsFromEvent(eventID uuid.UUID, tagNames []string) error
 	GetTagsByEventID(eventID uuid.UUID) ([]TagResponse, error)
 	GetTagsByNames(tagNames []string) ([]TagResponse, error)
 	ReplaceEventTags(eventID uuid.UUID, tagNames []string) error
-
-	// Analytics operations (admin only)
-	GetTagAnalytics() (*TagAnalyticsResponse, error)
-	GetTagPopularityAnalytics() ([]TagAnalytics, error)
-	GetTagTrends(months int) ([]TagTrend, error)
-	GetTagComparisons() ([]TagComparison, error)
 }
 
 type service struct {
@@ -54,103 +44,18 @@ func NewService(repo Repository) Service {
 	}
 }
 
-// Cache helper methods
-func (s *service) setCache(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
-	if s.redisClient == nil {
-		return nil // Skip caching if Redis is not available
-	}
-
-	data, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("failed to marshal cache data: %w", err)
-	}
-
-	return s.redisClient.Set(ctx, key, data, ttl).Err()
-}
-
-func (s *service) getCache(ctx context.Context, key string, dest interface{}) error {
-	if s.redisClient == nil {
-		return fmt.Errorf("redis client not available")
-	}
-
-	data, err := s.redisClient.Get(ctx, key).Result()
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal([]byte(data), dest)
-}
-
-func (s *service) deleteCache(ctx context.Context, keys ...string) error {
-	if s.redisClient == nil || len(keys) == 0 {
-		return nil
-	}
-
-	return s.redisClient.Del(ctx, keys...).Err()
-}
-
-func (s *service) invalidateTagCache(ctx context.Context) error {
-	if s.redisClient == nil {
-		return nil
-	}
-
-	// Delete all tag-related cache keys
-	keys, err := s.redisClient.Keys(ctx, constants.PATTERN_INVALIDATE_TAGS_ALL).Result()
-	if err != nil {
-		return err
-	}
-
-	if len(keys) > 0 {
-		return s.redisClient.Del(ctx, keys...).Err()
-	}
-
-	return nil
-}
-
-// Helper function to generate slug from name
-func generateSlug(name string) string {
-	// Convert to lowercase
-	slug := strings.ToLower(name)
-
-	// Replace spaces and special characters with hyphens
-	reg := regexp.MustCompile(`[^\w\s-]`)
-	slug = reg.ReplaceAllString(slug, "")
-
-	// Replace multiple spaces/hyphens with single hyphen
-	reg = regexp.MustCompile(`[\s-]+`)
-	slug = reg.ReplaceAllString(slug, "-")
-
-	// Trim hyphens from start and end
-	slug = strings.Trim(slug, "-")
-
-	return slug
-}
-
-// Helper function to validate hex color
-func isValidHexColor(color string) bool {
-	if len(color) != 7 || color[0] != '#' {
-		return false
-	}
-	match, _ := regexp.MatchString("^#[0-9A-Fa-f]{6}$", color)
-	return match
-}
-
-// Admin CRUD operations
-
 func (s *service) CreateTag(adminID uuid.UUID, req CreateTagRequest) (*TagResponse, error) {
-	// Validate and clean name
+
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		return nil, errors.New("tag name cannot be empty")
 	}
 
-	// Generate slug
-	slug := generateSlug(name)
+	slug := GenerateSlug(name)
 	if slug == "" {
 		return nil, errors.New("tag name must contain at least one alphanumeric character")
 	}
 
-	// Check if tag with same slug already exists
 	existingTag, err := s.repo.GetBySlug(slug)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("failed to check existing tag: %w", err)
@@ -159,9 +64,8 @@ func (s *service) CreateTag(adminID uuid.UUID, req CreateTagRequest) (*TagRespon
 		return nil, errors.New("a tag with similar name already exists")
 	}
 
-	// Set default color if not provided or invalid
 	color := req.Color
-	if color == "" || !isValidHexColor(color) {
+	if color == "" || !IsValidHexColor(color) {
 		color = "#6B7280" // Default gray color
 	}
 
@@ -178,10 +82,9 @@ func (s *service) CreateTag(adminID uuid.UUID, req CreateTagRequest) (*TagRespon
 		return nil, fmt.Errorf("failed to create tag: %w", err)
 	}
 
-	// Invalidate tag cache after creation
+	// Invalidate tag cache
 	ctx := context.Background()
-	if err := s.invalidateTagCache(ctx); err != nil {
-		// Log error but don't fail the request
+	if err := InvalidateTagCache(ctx, s.redisClient); err != nil {
 		fmt.Printf("Warning: failed to invalidate tag cache after creation: %v\n", err)
 	}
 
@@ -206,13 +109,13 @@ func (s *service) GetTagBySlug(slug string) (*TagResponse, error) {
 	ctx := context.Background()
 	cacheKey := constants.BuildTagBySlugKey(slug)
 
-	// Try to get from cache first
+	// Trying cache
 	var cachedTag TagResponse
-	if err := s.getCache(ctx, cacheKey, &cachedTag); err == nil {
+	if err := GetCache(ctx, s.redisClient, cacheKey, &cachedTag); err == nil {
 		return &cachedTag, nil
 	}
 
-	// Cache miss - get from database
+	// Cache miss
 	tag, err := s.repo.GetBySlug(slug)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -223,9 +126,7 @@ func (s *service) GetTagBySlug(slug string) (*TagResponse, error) {
 
 	response := tag.ToResponse()
 
-	// Cache the result
-	if err := s.setCache(ctx, cacheKey, response, constants.TTL_TAG_DETAIL); err != nil {
-		// Log error but don't fail the request
+	if err := SetCache(ctx, s.redisClient, cacheKey, response, constants.TTL_TAG_DETAIL); err != nil {
 		fmt.Printf("Warning: failed to cache tag by slug: %v\n", err)
 	}
 
@@ -233,7 +134,7 @@ func (s *service) GetTagBySlug(slug string) (*TagResponse, error) {
 }
 
 func (s *service) UpdateTag(id uuid.UUID, adminID uuid.UUID, req UpdateTagRequest) (*TagResponse, error) {
-	// Get current tag
+
 	currentTag, err := s.repo.GetByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -242,7 +143,6 @@ func (s *service) UpdateTag(id uuid.UUID, adminID uuid.UUID, req UpdateTagReques
 		return nil, fmt.Errorf("failed to get tag: %w", err)
 	}
 
-	// Build updates map
 	updates := make(map[string]interface{})
 
 	if req.Name != nil {
@@ -251,8 +151,7 @@ func (s *service) UpdateTag(id uuid.UUID, adminID uuid.UUID, req UpdateTagReques
 			return nil, errors.New("tag name cannot be empty")
 		}
 
-		// Generate new slug
-		slug := generateSlug(name)
+		slug := GenerateSlug(name)
 		if slug == "" {
 			return nil, errors.New("tag name must contain at least one alphanumeric character")
 		}
@@ -278,7 +177,7 @@ func (s *service) UpdateTag(id uuid.UUID, adminID uuid.UUID, req UpdateTagReques
 
 	if req.Color != nil {
 		color := *req.Color
-		if color != "" && !isValidHexColor(color) {
+		if color != "" && !IsValidHexColor(color) {
 			return nil, errors.New("invalid color format. Use hex format like #FF0000")
 		}
 		if color == "" {
@@ -291,7 +190,6 @@ func (s *service) UpdateTag(id uuid.UUID, adminID uuid.UUID, req UpdateTagReques
 		updates["is_active"] = *req.IsActive
 	}
 
-	// Update timestamp and admin info
 	updates["updated_at"] = time.Now()
 	updates["updated_by"] = adminID
 
@@ -300,10 +198,10 @@ func (s *service) UpdateTag(id uuid.UUID, adminID uuid.UUID, req UpdateTagReques
 		return nil, fmt.Errorf("failed to update tag: %w", err)
 	}
 
-	// Invalidate tag cache after update
+	// Invalidate tag cache
 	ctx := context.Background()
-	if err := s.invalidateTagCache(ctx); err != nil {
-		// Log error but don't fail the request
+	if err := InvalidateTagCache(ctx, s.redisClient); err != nil {
+
 		fmt.Printf("Warning: failed to invalidate tag cache after update: %v\n", err)
 	}
 
@@ -312,7 +210,7 @@ func (s *service) UpdateTag(id uuid.UUID, adminID uuid.UUID, req UpdateTagReques
 }
 
 func (s *service) DeleteTag(id uuid.UUID, adminID uuid.UUID) error {
-	// Check if tag exists
+
 	_, err := s.repo.GetByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -335,10 +233,10 @@ func (s *service) DeleteTag(id uuid.UUID, adminID uuid.UUID) error {
 		return fmt.Errorf("failed to delete tag: %w", err)
 	}
 
-	// Invalidate tag cache after deletion
+	// Invalidate tag cache
 	ctx := context.Background()
-	if err := s.invalidateTagCache(ctx); err != nil {
-		// Log error but don't fail the request
+	if err := InvalidateTagCache(ctx, s.redisClient); err != nil {
+
 		fmt.Printf("Warning: failed to invalidate tag cache after deletion: %v\n", err)
 	}
 
@@ -346,7 +244,7 @@ func (s *service) DeleteTag(id uuid.UUID, adminID uuid.UUID) error {
 }
 
 func (s *service) GetAllTags(query TagListQuery) (*PaginatedTags, error) {
-	// Set defaults
+
 	if query.Page <= 0 {
 		query.Page = 1
 	}
@@ -381,13 +279,12 @@ func (s *service) GetActiveTags() ([]TagResponse, error) {
 	ctx := context.Background()
 	cacheKey := constants.CACHE_KEY_TAGS_ACTIVE
 
-	// Try to get from cache first
 	var cachedTags []TagResponse
-	if err := s.getCache(ctx, cacheKey, &cachedTags); err == nil {
+	if err := GetCache(ctx, s.redisClient, cacheKey, &cachedTags); err == nil {
 		return cachedTags, nil
 	}
 
-	// Cache miss - get from database
+	// Cache miss
 	tags, err := s.repo.GetActive()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active tags: %w", err)
@@ -398,9 +295,7 @@ func (s *service) GetActiveTags() ([]TagResponse, error) {
 		responses[i] = tag.ToResponse()
 	}
 
-	// Cache the result
-	if err := s.setCache(ctx, cacheKey, responses, constants.TTL_TAGS_ACTIVE); err != nil {
-		// Log error but don't fail the request
+	if err := SetCache(ctx, s.redisClient, cacheKey, responses, constants.TTL_TAGS_ACTIVE); err != nil {
 		fmt.Printf("Warning: failed to cache active tags: %v\n", err)
 	}
 
@@ -448,7 +343,6 @@ func (s *service) AssignTagsToEvent(eventID uuid.UUID, tagNames []string) error 
 		if tagID, exists := existingTagMap[name]; exists {
 			tagIDs = append(tagIDs, tagID)
 		}
-		// Skip non-existing tags - only assign existing ones
 	}
 
 	if len(tagIDs) == 0 {
@@ -544,49 +438,4 @@ func (s *service) ReplaceEventTags(eventID uuid.UUID, tagNames []string) error {
 	}
 
 	return s.repo.ReplaceEventTags(eventID, tagIDs)
-}
-
-// Analytics operations
-
-func (s *service) GetTagAnalytics() (*TagAnalyticsResponse, error) {
-	analytics, err := s.repo.GetTagAnalytics()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tag analytics: %w", err)
-	}
-
-	return analytics, nil
-}
-
-func (s *service) GetTagPopularityAnalytics() ([]TagAnalytics, error) {
-	analytics, err := s.repo.GetTagPopularityAnalytics()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tag popularity analytics: %w", err)
-	}
-
-	return analytics, nil
-}
-
-func (s *service) GetTagTrends(months int) ([]TagTrend, error) {
-	if months <= 0 {
-		months = 6 // Default to 6 months
-	}
-	if months > 24 {
-		months = 24 // Max 24 months
-	}
-
-	trends, err := s.repo.GetTagTrends(months)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tag trends: %w", err)
-	}
-
-	return trends, nil
-}
-
-func (s *service) GetTagComparisons() ([]TagComparison, error) {
-	comparisons, err := s.repo.GetTagComparisons()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get tag comparisons: %w", err)
-	}
-
-	return comparisons, nil
 }

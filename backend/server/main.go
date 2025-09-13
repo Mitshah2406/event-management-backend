@@ -52,15 +52,18 @@ func main() {
 	var rateLimiter *ratelimit.RateLimiter
 	if cfg.RateLimit.Enabled {
 		rateLimiterConfig := &ratelimit.Config{
-			Enabled:           cfg.RateLimit.Enabled,
-			WindowDuration:    cfg.RateLimit.WindowDuration,
-			DefaultRequests:   cfg.RateLimit.DefaultRequests,
-			PublicRequests:    cfg.RateLimit.PublicRequests,
-			AuthRequests:      cfg.RateLimit.AuthRequests,
-			BookingRequests:   cfg.RateLimit.BookingRequests,
-			AdminRequests:     cfg.RateLimit.AdminRequests,
-			AnalyticsRequests: cfg.RateLimit.AnalyticsRequests,
-			WhitelistedIPs:    cfg.RateLimit.WhitelistedIPs,
+			Enabled:                 cfg.RateLimit.Enabled,
+			WindowDuration:          cfg.RateLimit.WindowDuration,
+			DefaultRequests:         cfg.RateLimit.DefaultRequests,
+			PublicRequests:          cfg.RateLimit.PublicRequests,
+			AuthRequests:            cfg.RateLimit.AuthRequests,
+			BookingRequests:         cfg.RateLimit.BookingRequests,
+			AdminRequests:           cfg.RateLimit.AdminRequests,
+			AnalyticsRequests:       cfg.RateLimit.AnalyticsRequests,
+			WhitelistedIPs:          cfg.RateLimit.WhitelistedIPs,
+			BookingCriticalRequests: cfg.RateLimit.BookingCriticalRequests,
+			UserRequests:            cfg.RateLimit.UserRequests,
+			HealthRequests:          cfg.RateLimit.HealthRequests,
 		}
 
 		rateLimiter = ratelimit.NewRateLimiter(db.GetRedis(), rateLimiterConfig)
@@ -153,7 +156,9 @@ func setupRouter(cfg *config.Config, db *database.DB, rateLimiter *ratelimit.Rat
 
 	// CORS configuration
 	engine.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"}, // Configure based on your needs
+		AllowOriginFunc: func(origin string) bool {
+			return true // allow every origin dynamically
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-RateLimit-*"},
 		ExposeHeaders:    []string{"Content-Length", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"},
