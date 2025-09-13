@@ -365,6 +365,7 @@ func (s *service) GetAvailableSeatsInSection(ctx context.Context, sectionID stri
 }
 
 func (s *service) GetAvailableSeatsInSectionForEvent(ctx context.Context, sectionID string, eventID string) ([]SeatResponse, error) {
+	logger.GetDefault().Info("Fetching available seats for section:", sectionID, "and event:", eventID)
 	sectionUUID, err := uuid.Parse(sectionID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid section ID: %w", err)

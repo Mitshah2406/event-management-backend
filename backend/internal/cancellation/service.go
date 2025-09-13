@@ -3,6 +3,7 @@ package cancellation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +28,7 @@ type Service interface {
 type BookingService interface {
 	GetBooking(ctx context.Context, bookingID uuid.UUID) (BookingInfo, error)
 	CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error
+	CancelBookingWithVersion(ctx context.Context, bookingID uuid.UUID, expectedVersion int) error
 }
 
 type WaitlistService interface {
@@ -41,6 +43,7 @@ type BookingInfo struct {
 	TotalSeats int       `json:"total_seats"`
 	Status     string    `json:"status"`
 	BookingRef string    `json:"booking_ref"`
+	Version    int       `json:"version"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
@@ -175,8 +178,12 @@ func (s *service) RequestCancellation(ctx context.Context, bookingID uuid.UUID, 
 		return nil, fmt.Errorf("failed to create cancellation: %w", err)
 	}
 
-	// Update booking status to CANCELLED and free up seats
-	if err := s.bookingService.CancelBookingInternal(ctx, bookingID); err != nil {
+	// Update booking status to CANCELLED with version check
+	if err := s.bookingService.CancelBookingWithVersion(ctx, bookingID, booking.Version); err != nil {
+		// If version mismatch, provide a user-friendly message
+		if strings.Contains(err.Error(), "version mismatch") || strings.Contains(err.Error(), "modified by another process") {
+			return nil, fmt.Errorf("booking was recently modified, please refresh and try again")
+		}
 		return cancellation, fmt.Errorf("cancellation created but failed to update booking status: %w", err)
 	}
 

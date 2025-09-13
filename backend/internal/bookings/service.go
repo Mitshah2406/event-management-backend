@@ -11,6 +11,19 @@ import (
 	"github.com/google/uuid"
 )
 
+// BookingData represents booking data for external services
+type BookingData struct {
+	ID         uuid.UUID `json:"id"`
+	UserID     uuid.UUID `json:"user_id"`
+	EventID    uuid.UUID `json:"event_id"`
+	TotalPrice float64   `json:"total_price"`
+	TotalSeats int       `json:"total_seats"`
+	Status     string    `json:"status"`
+	BookingRef string    `json:"booking_ref"`
+	Version    int       `json:"version"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type SeatService interface {
 	ValidateHold(ctx context.Context, holdID string, userID string) (*HoldValidationResult, error)
 	ReleaseHold(ctx context.Context, holdID string) error
@@ -39,9 +52,11 @@ type SeatHoldDetails struct {
 type Service interface {
 	ConfirmBooking(ctx context.Context, userID uuid.UUID, req BookingConfirmationRequest) (*BookingConfirmationResponse, error)
 	GetBooking(ctx context.Context, bookingID uuid.UUID) (*Booking, error)
+	GetBookingData(ctx context.Context, bookingID uuid.UUID) (*BookingData, error)
 	GetUserBookings(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error)
 	CancelBooking(ctx context.Context, bookingID uuid.UUID, userID uuid.UUID) error
 	CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error
+	CancelBookingWithVersion(ctx context.Context, bookingID uuid.UUID, expectedVersion int) error
 
 	// Payment operations
 	ProcessPayment(ctx context.Context, bookingID uuid.UUID, amount float64, method string) (*PaymentInfo, error)
@@ -255,6 +270,7 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 		Status:     booking.Status,
 		TotalPrice: booking.TotalPrice,
 		TotalSeats: booking.TotalSeats,
+		Version:    booking.Version,
 		Seats:      bookedSeats,
 		Payment:    *paymentInfo,
 		CreatedAt:  booking.CreatedAt,
@@ -265,6 +281,25 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 
 func (s *service) GetBooking(ctx context.Context, bookingID uuid.UUID) (*Booking, error) {
 	return s.repo.GetByID(ctx, bookingID)
+}
+
+func (s *service) GetBookingData(ctx context.Context, bookingID uuid.UUID) (*BookingData, error) {
+	booking, err := s.repo.GetByID(ctx, bookingID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BookingData{
+		ID:         booking.ID,
+		UserID:     booking.UserID,
+		EventID:    booking.EventID,
+		TotalPrice: booking.TotalPrice,
+		TotalSeats: booking.TotalSeats,
+		Status:     booking.Status,
+		BookingRef: booking.BookingRef,
+		Version:    booking.Version,
+		CreatedAt:  booking.CreatedAt,
+	}, nil
 }
 
 func (s *service) GetUserBookings(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error) {
@@ -312,6 +347,33 @@ func (s *service) CancelBookingInternal(ctx context.Context, bookingID uuid.UUID
 	// Cancel the booking
 	if err := s.repo.Cancel(ctx, bookingID); err != nil {
 		return fmt.Errorf("failed to cancel booking: %w", err)
+	}
+
+	return nil
+}
+
+// CancelBookingWithVersion cancels a booking with optimistic locking for internal use
+func (s *service) CancelBookingWithVersion(ctx context.Context, bookingID uuid.UUID, expectedVersion int) error {
+	// Get the booking to validate state
+	booking, err := s.repo.GetByID(ctx, bookingID)
+	if err != nil {
+		return fmt.Errorf("failed to get booking: %w", err)
+	}
+
+	// Check if already cancelled
+	if booking.IsCancelled() {
+		return fmt.Errorf("booking is already cancelled")
+	}
+
+	// Validate version matches current state
+	if booking.Version != expectedVersion {
+		return fmt.Errorf("booking was modified by another process (version mismatch: expected %d, got %d)",
+			expectedVersion, booking.Version)
+	}
+
+	// Cancel the booking with version check
+	if err := s.repo.CancelWithVersion(ctx, bookingID, expectedVersion); err != nil {
+		return fmt.Errorf("failed to cancel booking with version: %w", err)
 	}
 
 	return nil

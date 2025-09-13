@@ -15,6 +15,7 @@ type Booking struct {
 	TotalPrice  float64    `gorm:"not null" json:"total_price"`
 	Status      string     `gorm:"type:varchar(20);check:status IN ('CONFIRMED', 'CANCELLED');default:'CONFIRMED';index" json:"status"`
 	BookingRef  string     `gorm:"unique;not null" json:"booking_ref"`
+	Version     int        `gorm:"not null;default:1" json:"version"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	CancelledAt *time.Time `json:"cancelled_at,omitempty"`

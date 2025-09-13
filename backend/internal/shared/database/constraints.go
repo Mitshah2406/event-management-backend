@@ -4,31 +4,28 @@ import (
 	"gorm.io/gorm"
 )
 
-// MigrateConstraints adds critical database constraints for concurrency control
+// MigrateConstraints adds database constraints that cannot be handled by GORM AutoMigrate
 func MigrateConstraints(db *gorm.DB) error {
-	// Add unique constraint to prevent double booking of seats for same event
+	// Note: Unique constraints and basic indexes are now handled by GORM tags in model definitions:
+	// - SeatBooking: uniqueIndex:idx_unique_seat_event on (seat_id, event_id)
+	// - Booking: index tags on user_id, event_id, status
+	// - Individual field indexes are created automatically by GORM
+
+	// Add version column for optimistic locking if it doesn't exist
+	// This is needed for existing tables that may not have this column
 	err := db.Exec(`
-		ALTER TABLE seat_bookings 
-		ADD CONSTRAINT IF NOT EXISTS unique_seat_per_event 
-		UNIQUE (seat_id, event_id);
+		ALTER TABLE bookings 
+		ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 	`).Error
 	if err != nil {
 		return err
 	}
 
-	// Add index for better performance on seat availability queries
+	// PostgreSQL-specific: Create indexes CONCURRENTLY for better performance during migration
+	// GORM doesn't support CONCURRENTLY, so we handle critical performance indexes manually
 	err = db.Exec(`
-		CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_seat_bookings_seat_event_performance 
-		ON seat_bookings (seat_id, event_id);
-	`).Error
-	if err != nil {
-		return err
-	}
-
-	// Add index for booking queries by event
-	err = db.Exec(`
-		CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_seat_bookings_event_id 
-		ON seat_bookings (event_id);
+		CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_bookings_id_version 
+		ON bookings (id, version);
 	`).Error
 	if err != nil {
 		return err

@@ -187,6 +187,137 @@ func (s *service) populateEventCapacity(response *EventResponse) error {
 	return nil
 }
 
+// Helper function to populate venue sections in event response
+func (s *service) populateVenueSections(response *EventResponse) error {
+	if s.venueService == nil {
+		return nil // No venue service available
+	}
+
+	eventID, err := uuid.Parse(response.ID)
+	if err != nil {
+		return err
+	}
+
+	// Get venue sections for this event from the venue service
+	sectionsInterface, err := s.venueService.GetSectionsByTemplateID(context.TODO(), response.VenueTemplateID)
+	if err != nil {
+		// Don't fail the entire request if venue sections are unavailable
+		// Just leave the sections empty
+		return nil
+	}
+
+	// Use reflection to handle the interface{} response and convert to our VenueSection format
+	sectionsValue := reflect.ValueOf(sectionsInterface)
+	if sectionsValue.Kind() != reflect.Slice {
+		return nil // Invalid response format, skip sections
+	}
+
+	sections := make([]VenueSection, 0, sectionsValue.Len())
+	for i := 0; i < sectionsValue.Len(); i++ {
+		section := sectionsValue.Index(i)
+		if section.Kind() == reflect.Struct {
+			// Extract fields using reflection
+			id := ""
+			if idField := section.FieldByName("ID"); idField.IsValid() && idField.Type() == reflect.TypeOf(uuid.UUID{}) {
+				id = idField.Interface().(uuid.UUID).String()
+			}
+
+			name := ""
+			if nameField := section.FieldByName("Name"); nameField.IsValid() && nameField.Kind() == reflect.String {
+				name = nameField.String()
+			}
+
+			description := ""
+			if descField := section.FieldByName("Description"); descField.IsValid() && descField.Kind() == reflect.String {
+				description = descField.String()
+			}
+
+			rowStart := ""
+			if rowStartField := section.FieldByName("RowStart"); rowStartField.IsValid() && rowStartField.Kind() == reflect.String {
+				rowStart = rowStartField.String()
+			}
+
+			rowEnd := ""
+			if rowEndField := section.FieldByName("RowEnd"); rowEndField.IsValid() && rowEndField.Kind() == reflect.String {
+				rowEnd = rowEndField.String()
+			}
+
+			seatsPerRow := 0
+			if seatsPerRowField := section.FieldByName("SeatsPerRow"); seatsPerRowField.IsValid() && seatsPerRowField.Kind() == reflect.Int {
+				seatsPerRow = int(seatsPerRowField.Int())
+			}
+
+			totalSeats := 0
+			if totalSeatsField := section.FieldByName("TotalSeats"); totalSeatsField.IsValid() && totalSeatsField.Kind() == reflect.Int {
+				totalSeats = int(totalSeatsField.Int())
+			}
+
+			// Try to get event pricing for this section
+			priceMultiplier := 1.0
+			price := response.BasePrice
+			if eventPricing := s.getEventPricingForSection(eventID, id); eventPricing != nil {
+				priceMultiplier = eventPricing.PriceMultiplier
+				price = response.BasePrice * priceMultiplier
+			}
+
+			sections = append(sections, VenueSection{
+				ID:              id,
+				Name:            name,
+				Description:     description,
+				RowStart:        rowStart,
+				RowEnd:          rowEnd,
+				SeatsPerRow:     seatsPerRow,
+				TotalSeats:      totalSeats,
+				PriceMultiplier: priceMultiplier,
+				Price:           price,
+			})
+		}
+	}
+
+	response.VenueSections = sections
+	return nil
+}
+
+// EventPricingData represents event pricing information
+type EventPricingData struct {
+	PriceMultiplier float64
+	IsActive        bool
+}
+
+// Helper function to get event pricing for a specific section
+func (s *service) getEventPricingForSection(eventID uuid.UUID, sectionID string) *EventPricingData {
+	sectionUUID, err := uuid.Parse(sectionID)
+	if err != nil {
+		return nil
+	}
+
+	// Create a temporary struct to query the event_pricing table directly
+	type EventPricingQuery struct {
+		PriceMultiplier float64 `gorm:"column:price_multiplier"`
+		IsActive        bool    `gorm:"column:is_active"`
+	}
+
+	db := s.repo.(*repository).db // Access the underlying DB
+	var pricing EventPricingQuery
+
+	err = db.Table("event_pricing").
+		Where("event_id = ? AND section_id = ? AND is_active = true", eventID, sectionUUID).
+		First(&pricing).Error
+
+	if err != nil {
+		// Return default pricing if not found
+		return &EventPricingData{
+			PriceMultiplier: 1.0,
+			IsActive:        true,
+		}
+	}
+
+	return &EventPricingData{
+		PriceMultiplier: pricing.PriceMultiplier,
+		IsActive:        pricing.IsActive,
+	}
+}
+
 // validateTagsExist checks if all provided tag names exist in the database
 func (s *service) validateTagsExist(tagNames []string) error {
 	if s.tagService == nil {
@@ -417,6 +548,11 @@ func (s *service) GetEventByID(id uuid.UUID) (*EventResponse, error) {
 	// Populate tags in response
 	if err := s.populateEventTags(&response); err != nil {
 		return nil, fmt.Errorf("failed to populate tags: %w", err)
+	}
+
+	// Populate venue sections in response
+	if err := s.populateVenueSections(&response); err != nil {
+		return nil, fmt.Errorf("failed to populate venue sections: %w", err)
 	}
 
 	// Cache the result
