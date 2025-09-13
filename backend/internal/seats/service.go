@@ -15,16 +15,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// Service interface for seat business logic
 type Service interface {
-	// Seat Management (Note: Seat creation is now automatic when venue sections are created)
+	// Seat Management
 	GetSeatsBySectionID(ctx context.Context, sectionID string) ([]Seat, error)
 	GetSeatByID(ctx context.Context, id string) (*Seat, error)
 	UpdateSeat(ctx context.Context, id string, req UpdateSeatRequest) (*Seat, error)
 	DeleteSeat(ctx context.Context, id string) error
-	BulkUpdateSeatStatus(ctx context.Context, req BulkUpdateStatusRequest) error
 
-	// Seat Holding (Your Core Flow)
+	// Seat Holding (Core Flow)
 	HoldSeats(ctx context.Context, req SeatHoldRequest) (*SeatHoldResponse, error)
 	ReleaseHold(ctx context.Context, holdID string) error
 	ValidateHold(ctx context.Context, holdID string, userID string) (*HoldValidationResult, error)
@@ -35,20 +33,17 @@ type Service interface {
 	GetAvailableSeatsInSection(ctx context.Context, sectionID string) ([]SeatResponse, error)
 	GetAvailableSeatsInSectionForEvent(ctx context.Context, sectionID string, eventID string) ([]SeatResponse, error)
 
-	// Additional methods for booking service integration
+	// Additional helper methods
 	GetSeatsByHoldID(ctx context.Context, holdID string) ([]SeatInfo, error)
 	GetHoldDetails(ctx context.Context, holdID string) (*SeatHoldDetails, error)
-	UpdateSeatStatusToBulk(ctx context.Context, seatIDs []uuid.UUID, status string) error
 }
 
-// service implements Service interface
 type service struct {
 	repo         Repository
 	config       *config.Config
 	cacheService cache.Service
 }
 
-// NewService creates a new seat service
 func NewService(repo Repository, cfg *config.Config) Service {
 	return &service{
 		repo:   repo,
@@ -56,13 +51,11 @@ func NewService(repo Repository, cfg *config.Config) Service {
 	}
 }
 
-// SetCacheService injects the cache service dependency
 func (s *service) SetCacheService(cacheService cache.Service) {
 	s.cacheService = cacheService
 }
 
-// ============= SEAT MANAGEMENT =============
-// Note: Seat creation is now automatic when venue sections are created
+//  SEAT MANAGEMENT
 
 func (s *service) GetSeatsBySectionID(ctx context.Context, sectionID string) ([]Seat, error) {
 	sectionUUID, err := uuid.Parse(sectionID)
@@ -141,35 +134,13 @@ func (s *service) DeleteSeat(ctx context.Context, id string) error {
 	return s.repo.DeleteSeat(ctx, seatID)
 }
 
-func (s *service) BulkUpdateSeatStatus(ctx context.Context, req BulkUpdateStatusRequest) error {
-	validStatuses := map[string]bool{"AVAILABLE": true, "BLOCKED": true}
-	if !validStatuses[req.Status] {
-		return fmt.Errorf("invalid seat status: %s", req.Status)
-	}
-
-	var seatIDs []uuid.UUID
-	for _, idStr := range req.SeatIDs {
-		id, err := uuid.Parse(idStr)
-		if err != nil {
-			return fmt.Errorf("invalid seat ID: %s", idStr)
-		}
-		seatIDs = append(seatIDs, id)
-	}
-
-	return s.repo.UpdateSeatsStatus(ctx, seatIDs, req.Status)
-}
-
-// ============= SEAT HOLDING (YOUR CORE FLOW) =============
+//  SEAT HOLDING (CORE FLOW)
 
 func (s *service) HoldSeats(ctx context.Context, req SeatHoldRequest) (*SeatHoldResponse, error) {
 	// Validate input
 	if len(req.SeatIDs) == 0 {
 		return nil, fmt.Errorf("no seats specified")
 	}
-	// if len(req.SeatIDs) > 10 {
-	// 	return nil, fmt.Errorf("cannot hold more than 10 seats at once")
-	// }
-
 	// Parse seat IDs
 	var seatUUIDs []uuid.UUID
 	for _, idStr := range req.SeatIDs {
@@ -262,7 +233,7 @@ func (s *service) HoldSeats(ctx context.Context, req SeatHoldRequest) (*SeatHold
 			SectionID:   seat.SectionID.String(),
 			SeatNumber:  seat.SeatNumber,
 			Row:         seat.Row,
-			SectionName: "", // Will be populated from section data
+			SectionName: "", // Will be populated later from section data
 			Price:       seatPrice,
 		})
 		totalPrice += seatPrice
@@ -332,8 +303,7 @@ func (s *service) GetUserHolds(ctx context.Context, userID string) ([]SeatHoldDe
 	for _, holdID := range holdIDs {
 		details, err := s.repo.GetHoldDetails(ctx, holdID)
 		if err != nil {
-			// Skip expired or invalid holds
-			continue
+			continue // skip invalid holds
 		}
 		holdDetails = append(holdDetails, *details)
 	}
@@ -341,7 +311,7 @@ func (s *service) GetUserHolds(ctx context.Context, userID string) ([]SeatHoldDe
 	return holdDetails, nil
 }
 
-// ============= AVAILABILITY CHECKS =============
+//  AVAILABILITY CHECKS
 
 func (s *service) CheckSeatAvailability(ctx context.Context, seatIDs []string) (*SeatAvailabilityResponse, error) {
 	var seatUUIDs []uuid.UUID
@@ -353,13 +323,13 @@ func (s *service) CheckSeatAvailability(ctx context.Context, seatIDs []string) (
 		seatUUIDs = append(seatUUIDs, id)
 	}
 
-	// Check Postgres availability
+	// Check Postgres first
 	pgAvailability, err := s.repo.CheckSeatsAvailability(ctx, seatUUIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check postgres availability: %w", err)
 	}
 
-	// Check Redis holds
+	// Check Redis holds also
 	redisHolds, err := s.repo.CheckSeatHolds(ctx, seatUUIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check redis holds: %w", err)
@@ -394,31 +364,29 @@ func (s *service) GetAvailableSeatsInSection(ctx context.Context, sectionID stri
 	return nil, fmt.Errorf("GetAvailableSeatsInSection is deprecated - use GetAvailableSeatsInSectionForEvent instead")
 }
 
-// GetAvailableSeatsInSectionForEvent returns available seats for a specific event
 func (s *service) GetAvailableSeatsInSectionForEvent(ctx context.Context, sectionID string, eventID string) ([]SeatResponse, error) {
 	sectionUUID, err := uuid.Parse(sectionID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid section ID: %w", err)
 	}
-	logger.GetDefault().Debug("Getting available seats for section:", sectionID, "and event:", eventID)
+	logger.GetDefault().Debug("getting available seats for section:", sectionID, "and event:", eventID)
 	eventUUID, err := uuid.Parse(eventID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid event ID: %w", err)
 	}
 
-	// Try to get from cache first
 	cacheKey := constants.BuildSeatAvailabilityKey(sectionID, eventID)
 	if s.cacheService != nil {
 		var cachedSeats []SeatResponse
 		if err := s.cacheService.Get(ctx, cacheKey, &cachedSeats); err == nil {
-			logger.GetDefault().Debug("Cache HIT for seat availability:", cacheKey)
+			logger.GetDefault().Debug("cache hit for seat availability:", cacheKey)
 			return cachedSeats, nil
 		} else {
-			logger.GetDefault().Debug("Cache MISS for seat availability:", cacheKey)
+			logger.GetDefault().Debug("cache miss for seat availability:", cacheKey)
 		}
 	}
 
-	// Get all seats in section (not just "available" ones since we need event-specific logic)
+	// Get all seats in section
 	seats, err := s.repo.GetSeatsBySectionID(ctx, sectionUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get seats: %w", err)
@@ -430,7 +398,7 @@ func (s *service) GetAvailableSeatsInSectionForEvent(ctx context.Context, sectio
 		return nil, fmt.Errorf("failed to get seat bookings: %w", err)
 	}
 
-	// Check Redis holds for these seats
+	// Check Redis holds
 	var seatUUIDs []uuid.UUID
 	for _, seat := range seats {
 		seatUUIDs = append(seatUUIDs, seat.ID)
@@ -474,7 +442,7 @@ func (s *service) GetAvailableSeatsInSectionForEvent(ctx context.Context, sectio
 	return response, nil
 }
 
-// calculateSeatPrices calculates the actual price for each seat based on event pricing
+// calculates the actual price for each seat based on event pricing
 func (s *service) calculateSeatPrices(eventID string, seats []Seat) (map[string]float64, error) {
 	prices := make(map[string]float64)
 
@@ -490,13 +458,12 @@ func (s *service) calculateSeatPrices(eventID string, seats []Seat) (map[string]
 		BasePrice float64 `json:"base_price"`
 	}
 
-	// Get base price from events table (simple approach)
+	// Get base price from events table
 	if err := s.repo.(*repository).db.Table("events").
 		Select("base_price").
 		Where("id = ?", eventUUID).
 		First(&event).Error; err != nil {
-		// Fallback to default price if event not found
-		event.BasePrice = 50.0
+		event.BasePrice = 50.0 // fallback
 	}
 
 	// Get event pricing for each unique section
@@ -547,7 +514,7 @@ func (s *service) calculateSeatPrices(eventID string, seats []Seat) (map[string]
 	return prices, nil
 }
 
-// GetSeatsByHoldID retrieves seats associated with a hold ID
+// retrieves seats associated with a hold ID
 func (s *service) GetSeatsByHoldID(ctx context.Context, holdID string) ([]SeatInfo, error) {
 	// Get hold data from Redis
 	holdData, err := s.repo.GetHoldDetails(ctx, holdID)
@@ -620,28 +587,10 @@ func (s *service) GetSeatsByHoldID(ctx context.Context, holdID string) ([]SeatIn
 	return seatInfos, nil
 }
 
-// GetHoldDetails retrieves hold details from Redis
 func (s *service) GetHoldDetails(ctx context.Context, holdID string) (*SeatHoldDetails, error) {
 	return s.repo.GetHoldDetails(ctx, holdID)
 }
 
-// UpdateSeatStatusToBulk updates the status of multiple seats
-func (s *service) UpdateSeatStatusToBulk(ctx context.Context, seatIDs []uuid.UUID, status string) error {
-	// Validate status - only permanent statuses allowed
-	validStatuses := map[string]bool{"AVAILABLE": true, "BLOCKED": true}
-	if !validStatuses[status] {
-		return fmt.Errorf("invalid seat status: %s", status)
-	}
-
-	// Update all seats in a single query
-	if err := s.repo.BulkUpdateSeatStatus(ctx, seatIDs, status); err != nil {
-		return fmt.Errorf("failed to bulk update seat status: %w", err)
-	}
-
-	return nil
-}
-
-// checkSeatsBookedForEvent checks if any of the given seats are already booked for the event
 func (s *service) checkSeatsBookedForEvent(ctx context.Context, seatIDs []uuid.UUID, eventID uuid.UUID) ([]string, error) {
 	var bookedSeatIDs []string
 
@@ -658,7 +607,6 @@ func (s *service) checkSeatsBookedForEvent(ctx context.Context, seatIDs []uuid.U
 	return bookedSeatIDs, nil
 }
 
-// getSeatBookingsForEvent retrieves seat bookings for a specific event and section
 func (s *service) getSeatBookingsForEvent(ctx context.Context, eventID uuid.UUID, sectionID uuid.UUID) ([]SeatBooking, error) {
 	var seatBookings []SeatBooking
 

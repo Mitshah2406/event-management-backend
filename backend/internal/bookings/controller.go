@@ -8,12 +8,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// Controller handles HTTP requests for bookings
 type Controller struct {
 	service Service
 }
 
-// NewController creates a new booking controller
 func NewController(service Service) *Controller {
 	return &Controller{service: service}
 }

@@ -7,21 +7,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Controller handles HTTP requests for seats
 type Controller struct {
 	service Service
 }
 
-// NewController creates a new seat controller
 func NewController(service Service) *Controller {
 	return &Controller{service: service}
 }
 
-// ============= SEAT MANAGEMENT =============
+// SEAT MANAGEMENT
 
-// NOTE: Manual seat creation removed - seats are now automatically generated when venue sections are created
-
-// GetSeatsBySectionID handles GET /api/v1/sections/:sectionId/seats
 func (c *Controller) GetSeatsBySectionID(ctx *gin.Context) {
 	sectionID := ctx.Param("sectionId")
 	if sectionID == "" {
@@ -38,7 +33,6 @@ func (c *Controller) GetSeatsBySectionID(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Seats retrieved successfully", seats, nil)
 }
 
-// GetSeat handles GET /api/v1/seats/:id
 func (c *Controller) GetSeat(ctx *gin.Context) {
 	id := ctx.Param("id")
 	if id == "" {
@@ -59,7 +53,6 @@ func (c *Controller) GetSeat(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Seat retrieved successfully", seat, nil)
 }
 
-// UpdateSeat handles PUT /api/v1/seats/:id
 func (c *Controller) UpdateSeat(ctx *gin.Context) {
 	id := ctx.Param("id")
 	if id == "" {
@@ -86,7 +79,6 @@ func (c *Controller) UpdateSeat(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Seat updated successfully", seat, nil)
 }
 
-// DeleteSeat handles DELETE /api/v1/seats/:id
 func (c *Controller) DeleteSeat(ctx *gin.Context) {
 	id := ctx.Param("id")
 	if id == "" {
@@ -107,26 +99,8 @@ func (c *Controller) DeleteSeat(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Seat deleted successfully", nil, nil)
 }
 
-// BulkUpdateSeatStatus handles POST /api/v1/seats/bulk-update
-func (c *Controller) BulkUpdateSeatStatus(ctx *gin.Context) {
-	var req BulkUpdateStatusRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Invalid request data", nil, err.Error())
-		return
-	}
+//  SEAT HOLDING
 
-	err := c.service.BulkUpdateSeatStatus(ctx.Request.Context(), req)
-	if err != nil {
-		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Failed to update seat statuses", nil, err.Error())
-		return
-	}
-
-	response.RespondJSON(ctx, "success", http.StatusOK, "Seat statuses updated successfully", nil, nil)
-}
-
-// ============= SEAT HOLDING (YOUR CORE BOOKING FLOW) =============
-
-// HoldSeats handles POST /api/v1/seats/hold
 func (c *Controller) HoldSeats(ctx *gin.Context) {
 	var req SeatHoldRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -143,7 +117,6 @@ func (c *Controller) HoldSeats(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Seats held successfully", holdResponse, nil)
 }
 
-// ReleaseHold handles DELETE /api/v1/seats/hold/:holdId
 func (c *Controller) ReleaseHold(ctx *gin.Context) {
 	holdID := ctx.Param("holdId")
 	if holdID == "" {
@@ -160,7 +133,6 @@ func (c *Controller) ReleaseHold(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Hold released successfully", nil, nil)
 }
 
-// ValidateHold handles GET /api/v1/seats/hold/:holdId/validate
 func (c *Controller) ValidateHold(ctx *gin.Context) {
 	holdID := ctx.Param("holdId")
 	if holdID == "" {
@@ -188,7 +160,6 @@ func (c *Controller) ValidateHold(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Hold is valid", result, nil)
 }
 
-// GetUserHolds handles GET /api/v1/users/:userId/holds
 func (c *Controller) GetUserHolds(ctx *gin.Context) {
 	userID := ctx.Param("userId")
 	if userID == "" {
@@ -205,9 +176,8 @@ func (c *Controller) GetUserHolds(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "User holds retrieved successfully", holds, nil)
 }
 
-// ============= AVAILABILITY CHECKS =============
+//  AVAILABILITY CHECKS
 
-// CheckSeatAvailability handles POST /api/v1/seats/availability
 func (c *Controller) CheckSeatAvailability(ctx *gin.Context) {
 	var req struct {
 		SeatIDs []string `json:"seat_ids" binding:"required,min=1"`
@@ -227,15 +197,13 @@ func (c *Controller) CheckSeatAvailability(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Seat availability checked successfully", availability, nil)
 }
 
-// GetAvailableSeatsInSection handles GET /api/v1/sections/:sectionId/seats/available?event_id=xxx
-// Updated to require event_id parameter for event-specific seat availability
 func (c *Controller) GetAvailableSeatsInSection(ctx *gin.Context) {
 	sectionID := ctx.Param("sectionId")
 	if sectionID == "" {
 		response.RespondJSON(ctx, "error", http.StatusBadRequest, "Section ID is required", nil, "missing section ID")
 		return
 	}
-	
+
 	// Get event ID from query parameter - required for event-specific availability
 	eventID := ctx.Query("event_id")
 	if eventID == "" {

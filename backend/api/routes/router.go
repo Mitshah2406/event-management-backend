@@ -435,10 +435,6 @@ func (s *SeatServiceAdapter) GetHoldDetails(ctx context.Context, holdID string) 
 	}, nil
 }
 
-func (s *SeatServiceAdapter) UpdateSeatStatusToBulk(ctx context.Context, seatIDs []uuid.UUID, status string) error {
-	return s.seatService.UpdateSeatStatusToBulk(ctx, seatIDs, status)
-}
-
 // WaitlistServiceAdapter adapts waitlist.Service to bookings.WaitlistService interface
 type WaitlistServiceAdapterForBookings struct {
 	waitlistService waitlist.Service
@@ -586,24 +582,24 @@ func (r *Router) setupCancellationRoutesWithWrappers(rg *gin.RouterGroup) {
 
 // setupSwaggerRoutes configures swagger documentation routes
 func (r *Router) setupSwaggerRoutes(engine *gin.Engine) {
-// Find the correct path to swagger.yaml
-swaggerPath := r.findSwaggerFile()
-if swaggerPath == "" {
- log.Println("⚠️ swagger.yaml not found, Swagger UI will not be available")
- return
-}
+	// Find the correct path to swagger.yaml
+	swaggerPath := r.findSwaggerFile()
+	if swaggerPath == "" {
+		log.Println("⚠️ swagger.yaml not found, Swagger UI will not be available")
+		return
+	}
 
-log.Printf("✅ Found swagger.yaml at: %s", swaggerPath)
+	log.Printf("✅ Found swagger.yaml at: %s", swaggerPath)
 
-// Serve swagger.yaml file directly
-engine.StaticFile("/swagger.yaml", swaggerPath)
+	// Serve swagger.yaml file directly
+	engine.StaticFile("/swagger.yaml", swaggerPath)
 
-// Add a debug endpoint to verify swagger file accessibility
-engine.GET("/swagger-debug", func(c *gin.Context) {
- wd, _ := os.Getwd()
- c.JSON(http.StatusOK, gin.H{
- "working_directory": wd,
-  "swagger_path":      swaggerPath,
+	// Add a debug endpoint to verify swagger file accessibility
+	engine.GET("/swagger-debug", func(c *gin.Context) {
+		wd, _ := os.Getwd()
+		c.JSON(http.StatusOK, gin.H{
+			"working_directory": wd,
+			"swagger_path":      swaggerPath,
 			"file_exists":       r.fileExists(swaggerPath),
 			"available_paths": []string{
 				"GET /docs - Swagger UI",
@@ -640,11 +636,11 @@ engine.GET("/swagger-debug", func(c *gin.Context) {
 // findSwaggerFile tries to locate swagger.yaml in various possible locations
 func (r *Router) findSwaggerFile() string {
 	possiblePaths := []string{
-		"./docs/swagger.yaml",           // If running from backend/
-		"../docs/swagger.yaml",          // If running from backend/server/
-		"docs/swagger.yaml",             // Alternative relative path
-		"../../docs/swagger.yaml",       // If running from backend/cmd/something/
-		"./swagger.yaml",                // If swagger.yaml is in current dir
+		"./docs/swagger.yaml",     // If running from backend/
+		"../docs/swagger.yaml",    // If running from backend/server/
+		"docs/swagger.yaml",       // Alternative relative path
+		"../../docs/swagger.yaml", // If running from backend/cmd/something/
+		"./swagger.yaml",          // If swagger.yaml is in current dir
 	}
 
 	// Try each possible path

@@ -17,7 +17,6 @@ type SeatService interface {
 	ReleaseHold(ctx context.Context, holdID string) error
 	GetSeatsByHoldID(ctx context.Context, holdID string) ([]SeatInfo, error)
 	GetHoldDetails(ctx context.Context, holdID string) (*SeatHoldDetails, error)
-	UpdateSeatStatusToBulk(ctx context.Context, seatIDs []uuid.UUID, status string) error
 }
 
 // WaitlistService interface for waitlist-related operations (to avoid circular dependency)

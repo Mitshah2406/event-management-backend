@@ -10,7 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Repository interface for seat operations
 type Repository interface {
 	// Seat CRUD
 	CreateSeats(ctx context.Context, seats []Seat) error
@@ -34,18 +33,13 @@ type Repository interface {
 	GetUserHolds(ctx context.Context, userID string) ([]string, error)                  // returns holdIDs
 	IsHoldValid(ctx context.Context, holdID string) (bool, error)
 	GetHoldDetails(ctx context.Context, holdID string) (*SeatHoldDetails, error)
-
-	// Bulk operations
-	BulkUpdateSeatStatus(ctx context.Context, seatIDs []uuid.UUID, status string) error
 }
 
-// repository implements Repository interface
 type repository struct {
 	db    *gorm.DB
 	redis *redis.Client
 }
 
-// NewRepository creates a new seat repository
 func NewRepository(db *gorm.DB, redisClient *redis.Client) Repository {
 	return &repository{
 		db:    db,
@@ -53,7 +47,7 @@ func NewRepository(db *gorm.DB, redisClient *redis.Client) Repository {
 	}
 }
 
-// ============= SEAT CRUD =============
+// SEAT CRUD
 
 func (r *repository) CreateSeats(ctx context.Context, seats []Seat) error {
 	return r.db.WithContext(ctx).Create(&seats).Error
@@ -106,7 +100,7 @@ func (r *repository) DeleteSeatsBySectionID(ctx context.Context, sectionID uuid.
 	return r.db.WithContext(ctx).Delete(&Seat{}, "section_id = ?", sectionID).Error
 }
 
-// ============= AVAILABILITY CHECKS =============
+// AVAILABILITY CHECKS
 
 func (r *repository) CheckSeatsAvailability(ctx context.Context, seatIDs []uuid.UUID) (map[string]bool, error) {
 	var seats []Seat
@@ -136,7 +130,7 @@ func (r *repository) GetAvailableSeatsInSection(ctx context.Context, sectionID u
 	return seats, err
 }
 
-// ============= REDIS SEAT HOLDING =============
+// REDIS SEAT HOLDING
 
 func (r *repository) HoldSeats(ctx context.Context, seatIDs []uuid.UUID, userID, holdID, eventID string, ttl time.Duration) error {
 	// If Redis is not available, skip holding for now
@@ -182,7 +176,7 @@ func (r *repository) HoldSeats(ctx context.Context, seatIDs []uuid.UUID, userID,
 
 func (r *repository) ReleaseHold(ctx context.Context, holdID string) error {
 	if r.redis == nil {
-		return fmt.Errorf("Redis client not available - seat holding disabled")
+		return fmt.Errorf("redis client not available - seat holding disabled")
 	}
 
 	pipe := r.redis.TxPipeline()
@@ -293,7 +287,6 @@ func (r *repository) GetHoldDetails(ctx context.Context, holdID string) (*SeatHo
 		return nil, err
 	}
 
-	// Get TTL
 	ttl, err := r.redis.TTL(ctx, holdKey).Result()
 	if err != nil {
 		ttl = 0
@@ -310,25 +303,7 @@ func (r *repository) GetHoldDetails(ctx context.Context, holdID string) (*SeatHo
 	return details, nil
 }
 
-// BulkUpdateSeatStatus updates the status of multiple seats in a single query
-func (r *repository) BulkUpdateSeatStatus(ctx context.Context, seatIDs []uuid.UUID, status string) error {
-	if len(seatIDs) == 0 {
-		return nil
-	}
-
-	err := r.db.WithContext(ctx).
-		Model(&Seat{}).
-		Where("id IN ?", seatIDs).
-		Update("status", status).Error
-
-	if err != nil {
-		return fmt.Errorf("failed to bulk update seat status: %w", err)
-	}
-
-	return nil
-}
-
-// ============= HELPER STRUCTS =============
+// Helper struct
 
 type SeatHoldDetails struct {
 	HoldID  string   `json:"hold_id"`
