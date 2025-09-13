@@ -22,12 +22,12 @@ func SetupVenueRoutes(rg *gin.RouterGroup, controller *Controller) {
 		templates.GET("/:id/sections", controller.GetSectionsByTemplateID) // GET /api/v1/venue-templates/:id/sections
 	}
 
-	// Event-specific venue reading routes (for convenience)
+	// Event-specific venue reading routes
 	events := rg.Group("/events")
 	events.Use(middleware.JWTAuth(), middleware.RequireRole("USER"))
 	{
 		events.GET("/:eventId/sections", controller.GetSectionsByEventID) // GET /api/v1/events/:eventId/sections
-		events.GET("/:eventId/venue/layout", controller.GetVenueLayout)   // GET /api/v1/events/:eventId/venue/layout (CORE ENDPOINT)
+		events.GET("/:eventId/venue/layout", controller.GetVenueLayout)   // GET /api/v1/events/:eventId/venue/layout
 	}
 
 	// Individual section routes

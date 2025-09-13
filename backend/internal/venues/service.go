@@ -2,22 +2,20 @@ package venues
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"strconv"
-	"time"
 
 	"evently/internal/seats"
 	"evently/internal/shared/constants"
 	"evently/pkg/cache"
+
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
-// Service interface for venue business logic
 type Service interface {
 	// Venue Templates
 	CreateTemplate(ctx context.Context, req CreateTemplateRequest) (*VenueTemplate, error)
@@ -44,14 +42,12 @@ type Service interface {
 	GetVenueLayout(ctx context.Context, eventID string) (*VenueLayoutResponse, error)
 }
 
-// service implements Service interface
 type service struct {
 	repo        Repository
 	seatRepo    seats.Repository
 	redisClient *redis.Client
 }
 
-// NewService creates a new venue service
 func NewService(repo Repository, seatRepo seats.Repository) Service {
 	return &service{
 		repo:        repo,
@@ -60,75 +56,7 @@ func NewService(repo Repository, seatRepo seats.Repository) Service {
 	}
 }
 
-// Cache helper methods
-func (s *service) setCache(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
-	if s.redisClient == nil {
-		return nil // Skip caching if Redis is not available
-	}
-
-	data, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("failed to marshal cache data: %w", err)
-	}
-
-	return s.redisClient.Set(ctx, key, data, ttl).Err()
-}
-
-func (s *service) getCache(ctx context.Context, key string, dest interface{}) error {
-	if s.redisClient == nil {
-		return fmt.Errorf("redis client not available")
-	}
-
-	data, err := s.redisClient.Get(ctx, key).Result()
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal([]byte(data), dest)
-}
-
-func (s *service) deleteCache(ctx context.Context, keys ...string) error {
-	if s.redisClient == nil || len(keys) == 0 {
-		return nil
-	}
-
-	return s.redisClient.Del(ctx, keys...).Err()
-}
-
-func (s *service) invalidateVenueCache(ctx context.Context, templateID *uuid.UUID) error {
-	if s.redisClient == nil {
-		return nil
-	}
-
-	// Build patterns for cache invalidation
-	patterns := []string{
-		constants.PATTERN_INVALIDATE_VENUES_ALL,
-	}
-
-	// If specific template ID provided, also invalidate its specific caches
-	if templateID != nil {
-		patterns = append(patterns, constants.CACHE_KEY_VENUE_TEMPLATE+templateID.String()+"*")
-		patterns = append(patterns, constants.CACHE_KEY_VENUE_SECTIONS+templateID.String()+"*")
-	}
-
-	// Get and delete matching keys
-	for _, pattern := range patterns {
-		keys, err := s.redisClient.Keys(ctx, pattern).Result()
-		if err != nil {
-			return err
-		}
-
-		if len(keys) > 0 {
-			if err := s.redisClient.Del(ctx, keys...).Err(); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// ============= VENUE TEMPLATES =============
+//  VENUE TEMPLATES
 
 func (s *service) CreateTemplate(ctx context.Context, req CreateTemplateRequest) (*VenueTemplate, error) {
 	// Validate template name uniqueness
@@ -140,7 +68,6 @@ func (s *service) CreateTemplate(ctx context.Context, req CreateTemplateRequest)
 		return nil, fmt.Errorf("template with name '%s' already exists", req.Name)
 	}
 
-	// Validate layout type
 	validLayouts := map[string]bool{
 		"THEATER":    true,
 		"STADIUM":    true,
@@ -165,8 +92,7 @@ func (s *service) CreateTemplate(ctx context.Context, req CreateTemplateRequest)
 	}
 
 	// Invalidate venue template caches after creation
-	if err := s.invalidateVenueCache(ctx, nil); err != nil {
-		// Log error but don't fail the request
+	if err := InvalidateVenueCache(ctx, s.redisClient, nil); err != nil {
 		log.Printf("Warning: failed to invalidate venue cache after template creation: %v", err)
 	}
 
@@ -181,16 +107,16 @@ func (s *service) GetTemplateByID(ctx context.Context, id string) (*VenueTemplat
 
 	cacheKey := constants.CACHE_KEY_VENUE_TEMPLATE + id
 
-	// Try to get from cache first
+	// get from cache first
 	var cachedTemplate VenueTemplate
-	if err := s.getCache(ctx, cacheKey, &cachedTemplate); err == nil {
+	if err := GetCache(ctx, s.redisClient, cacheKey, &cachedTemplate); err == nil {
 		log.Printf("Cache HIT for venue template: %s", cacheKey)
 		return &cachedTemplate, nil
 	} else {
 		log.Printf("Cache MISS for venue template: %s (error: %v)", cacheKey, err)
 	}
 
-	// Cache miss - get from database
+	// Cache miss
 	template, err := s.repo.GetTemplateByID(ctx, templateID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -199,9 +125,8 @@ func (s *service) GetTemplateByID(ctx context.Context, id string) (*VenueTemplat
 		return nil, fmt.Errorf("failed to get template: %w", err)
 	}
 
-	// Cache the result
-	if err := s.setCache(ctx, cacheKey, template, constants.TTL_VENUE_TEMPLATE); err != nil {
-		// Log error but don't fail the request
+	// Cache it
+	if err := SetCache(ctx, s.redisClient, cacheKey, template, constants.TTL_VENUE_TEMPLATE); err != nil {
 		log.Printf("Warning: failed to cache venue template: %v", err)
 	} else {
 		log.Printf("Cached venue template: %s", cacheKey)
@@ -233,22 +158,22 @@ func (s *service) GetTemplates(ctx context.Context, filters TemplateFilters) (*P
 
 	// Try to get from cache first
 	var cachedResult PaginatedTemplates
-	if err := s.getCache(ctx, cacheKey, &cachedResult); err == nil {
+	if err := GetCache(ctx, s.redisClient, cacheKey, &cachedResult); err == nil {
 		log.Printf("Cache HIT for venue templates: %s", cacheKey)
 		return &cachedResult, nil
 	} else {
 		log.Printf("Cache MISS for venue templates: %s (error: %v)", cacheKey, err)
 	}
 
-	// Cache miss - get from database
+	// Cache miss
 	result, err := s.repo.GetTemplates(ctx, filters)
 	if err != nil {
 		return nil, err
 	}
 
-	// Cache the result
-	if err := s.setCache(ctx, cacheKey, result, constants.TTL_VENUE_TEMPLATES); err != nil {
-		// Log error but don't fail the request
+	// Cache it
+	if err := SetCache(ctx, s.redisClient, cacheKey, result, constants.TTL_VENUE_TEMPLATES); err != nil {
+
 		log.Printf("Warning: failed to cache venue templates: %v", err)
 	} else {
 		log.Printf("Cached venue templates: %s", cacheKey)
@@ -319,8 +244,8 @@ func (s *service) UpdateTemplate(ctx context.Context, id string, req UpdateTempl
 		}
 
 		// Invalidate specific template caches after update
-		if err := s.invalidateVenueCache(ctx, &templateID); err != nil {
-			// Log error but don't fail the request
+		if err := InvalidateVenueCache(ctx, s.redisClient, &templateID); err != nil {
+
 			log.Printf("Warning: failed to invalidate venue cache after template update: %v", err)
 		}
 	}
@@ -351,7 +276,7 @@ func (s *service) DeleteTemplate(ctx context.Context, id string) error {
 	return nil
 }
 
-// ============= VENUE SECTIONS =============
+//  VENUE SECTIONS
 
 func (s *service) CreateSection(ctx context.Context, templateID string, req CreateSectionRequest) (*VenueSection, error) {
 	templateUUID, err := uuid.Parse(templateID)
@@ -402,7 +327,7 @@ func (s *service) GetSectionsByTemplateID(ctx context.Context, templateID string
 
 	// Try to get from cache first
 	var cachedSections []VenueSection
-	if err := s.getCache(ctx, cacheKey, &cachedSections); err == nil {
+	if err := GetCache(ctx, s.redisClient, cacheKey, &cachedSections); err == nil {
 		log.Printf("Cache HIT for venue sections: %s", cacheKey)
 		return cachedSections, nil
 	} else {
@@ -416,8 +341,8 @@ func (s *service) GetSectionsByTemplateID(ctx context.Context, templateID string
 	}
 
 	// Cache the result
-	if err := s.setCache(ctx, cacheKey, sections, constants.TTL_VENUE_SECTIONS); err != nil {
-		// Log error but don't fail the request
+	if err := SetCache(ctx, s.redisClient, cacheKey, sections, constants.TTL_VENUE_SECTIONS); err != nil {
+
 		log.Printf("Warning: failed to cache venue sections: %v", err)
 	} else {
 		log.Printf("Cached venue sections: %s", cacheKey)
@@ -468,7 +393,7 @@ func (s *service) GetVenueLayout(ctx context.Context, eventID string) (*VenueLay
 
 	// Try to get from cache first
 	var cachedLayout VenueLayoutResponse
-	if err := s.getCache(ctx, cacheKey, &cachedLayout); err == nil {
+	if err := GetCache(ctx, s.redisClient, cacheKey, &cachedLayout); err == nil {
 		log.Printf("Cache HIT for venue layout: %s", cacheKey)
 		return &cachedLayout, nil
 	} else {
@@ -482,8 +407,8 @@ func (s *service) GetVenueLayout(ctx context.Context, eventID string) (*VenueLay
 	}
 
 	// Cache the result
-	if err := s.setCache(ctx, cacheKey, layout, constants.TTL_VENUE_LAYOUT); err != nil {
-		// Log error but don't fail the request
+	if err := SetCache(ctx, s.redisClient, cacheKey, layout, constants.TTL_VENUE_LAYOUT); err != nil {
+
 		log.Printf("Warning: failed to cache venue layout: %v", err)
 	} else {
 		log.Printf("Cached venue layout: %s", cacheKey)
@@ -571,7 +496,7 @@ func (s *service) DeleteSection(ctx context.Context, id string) error {
 	return nil
 }
 
-// ============= EVENT PRICING =============
+//  EVENT PRICING
 
 func (s *service) CreateEventPricing(ctx context.Context, req CreateEventPricingRequest) (*EventPricingResponse, error) {
 	eventID, err := uuid.Parse(req.EventID)
@@ -708,7 +633,7 @@ func (s *service) DeleteEventPricingByEventID(ctx context.Context, eventID strin
 	return nil
 }
 
-// ============= HELPER FUNCTIONS =============
+//  HELPER FUNCTIONS
 
 // generateSeatsForSection automatically creates seats for a venue section
 func (s *service) generateSeatsForSection(ctx context.Context, section *VenueSection) error {
@@ -743,7 +668,7 @@ func (s *service) generateSeatsForSection(ctx context.Context, section *VenueSec
 
 	// Validate total seats match
 	if len(seatsToCreate) != section.TotalSeats {
-		return fmt.Errorf("generated seat count (%d) doesn't match section total (%d)", 
+		return fmt.Errorf("generated seat count (%d) doesn't match section total (%d)",
 			len(seatsToCreate), section.TotalSeats)
 	}
 
@@ -762,7 +687,7 @@ func (s *service) generateRowLabels(start, end string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("inconsistent row format: start is numeric but end is not")
 		}
-		
+
 		if startNum > endNum {
 			return nil, fmt.Errorf("start row (%d) cannot be greater than end row (%d)", startNum, endNum)
 		}

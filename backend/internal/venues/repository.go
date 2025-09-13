@@ -8,7 +8,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Repository interface for venue operations
 type Repository interface {
 	// Venue Templates
 	CreateTemplate(ctx context.Context, template *VenueTemplate) error
@@ -39,17 +38,15 @@ type Repository interface {
 	GetVenueLayoutForEvent(ctx context.Context, eventID uuid.UUID) (*VenueLayoutResponse, error)
 }
 
-// repository implements Repository interface
 type repository struct {
 	db *gorm.DB
 }
 
-// NewRepository creates a new venue repository
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-// ============= VENUE TEMPLATES =============
+//  VENUE TEMPLATES
 
 func (r *repository) CreateTemplate(ctx context.Context, template *VenueTemplate) error {
 	return r.db.WithContext(ctx).Create(template).Error
@@ -130,7 +127,7 @@ func (r *repository) DeleteTemplate(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&VenueTemplate{}, "id = ?", id).Error
 }
 
-// ============= VENUE SECTIONS =============
+//  VENUE SECTIONS
 
 func (r *repository) CreateSection(ctx context.Context, section *VenueSection) error {
 	return r.db.WithContext(ctx).Create(section).Error
@@ -180,7 +177,7 @@ func (r *repository) DeleteSectionsByTemplateID(ctx context.Context, templateID 
 	return r.db.WithContext(ctx).Delete(&VenueSection{}, "template_id = ?", templateID).Error
 }
 
-// ============= EVENT PRICING =============
+//  EVENT PRICING
 
 func (r *repository) CreateEventPricing(ctx context.Context, pricing *EventPricing) error {
 	return r.db.WithContext(ctx).Create(pricing).Error
@@ -228,7 +225,7 @@ func (r *repository) GetVenueLayoutForEvent(ctx context.Context, eventID uuid.UU
 		VenueTemplateID uuid.UUID `json:"venue_template_id"`
 		BasePrice       float64   `json:"base_price"`
 	}
-	
+
 	err := r.db.WithContext(ctx).
 		Table("events").
 		Select("id, name, venue_template_id, base_price").
@@ -290,17 +287,17 @@ func (r *repository) GetVenueLayoutForEvent(ctx context.Context, eventID uuid.UU
 		if err != nil {
 			return nil, fmt.Errorf("failed to get booked seats for section %s: %w", section.ID, err)
 		}
-		
+
 		// Convert seats to response format using event-specific status
 		seatResponses := make([]SeatResponse, len(section.Seats))
 		availableInSection := 0
-		
+
 		for i, seat := range section.Seats {
 			isHeld := false // TODO: Check Redis for holds when needed
-			
+
 			// Calculate event-specific effective status
-		effectiveStatus := r.calculateEffectiveStatus(seat, bookedSeatIDs, isHeld)
-			
+			effectiveStatus := r.calculateEffectiveStatus(seat, bookedSeatIDs, isHeld)
+
 			seatResponses[i] = SeatResponse{
 				ID:         seat.ID.String(),
 				SeatNumber: seat.SeatNumber,
@@ -325,10 +322,10 @@ func (r *repository) GetVenueLayoutForEvent(ctx context.Context, eventID uuid.UU
 	return layout, nil
 }
 
-// getBookedSeatIDs retrieves booked seat IDs for a specific event and section
+// retrieves booked seat IDs for a specific event and section
 func (r *repository) getBookedSeatIDs(ctx context.Context, eventID uuid.UUID, sectionID uuid.UUID) (map[uuid.UUID]bool, error) {
 	var seatIDs []uuid.UUID
-	
+
 	// Query seat_bookings table for this event and section
 	if err := r.db.WithContext(ctx).
 		Table("seat_bookings sb").
@@ -338,38 +335,38 @@ func (r *repository) getBookedSeatIDs(ctx context.Context, eventID uuid.UUID, se
 		Find(&seatIDs).Error; err != nil {
 		return nil, fmt.Errorf("failed to query booked seats: %w", err)
 	}
-	
+
 	// Convert to map for efficient lookup
 	bookedMap := make(map[uuid.UUID]bool)
 	for _, seatID := range seatIDs {
 		bookedMap[seatID] = true
 	}
-	
+
 	return bookedMap, nil
 }
 
-// calculateEffectiveStatus determines the effective status of a seat for an event
+// determines the effective status of a seat for an event
 func (r *repository) calculateEffectiveStatus(seat Seat, bookedSeatIDs map[uuid.UUID]bool, isHeld bool) string {
 	// Check permanent seat status first
 	if seat.Status == "BLOCKED" {
 		return "BLOCKED"
 	}
-	
+
 	// Check if held
 	if isHeld {
 		return "HELD"
 	}
-	
+
 	// Check if booked for this event
 	if bookedSeatIDs[seat.ID] {
 		return "BOOKED"
 	}
-	
+
 	// Default to available
 	return "AVAILABLE"
 }
 
-// ============= FILTER STRUCTS =============
+//  FILTER STRUCTS
 
 type TemplateFilters struct {
 	Page       int    `form:"page" binding:"omitempty,min=1"`

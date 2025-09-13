@@ -3,24 +3,20 @@ package venues
 import (
 	"evently/internal/shared/utils/response"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Controller handles HTTP requests for venues
 type Controller struct {
 	service Service
 }
 
-// NewController creates a new venue controller
 func NewController(service Service) *Controller {
 	return &Controller{service: service}
 }
 
-// ============= VENUE TEMPLATES =============
+//  VENUE TEMPLATES
 
-// CreateTemplate handles POST /api/v1/venue-templates
 func (c *Controller) CreateTemplate(ctx *gin.Context) {
 	var req CreateTemplateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -37,7 +33,6 @@ func (c *Controller) CreateTemplate(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusCreated, "Template created successfully", template, nil)
 }
 
-// GetTemplate handles GET /api/v1/venue-templates/:id
 func (c *Controller) GetTemplate(ctx *gin.Context) {
 	id := ctx.Param("id")
 	if id == "" {
@@ -58,7 +53,6 @@ func (c *Controller) GetTemplate(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Template retrieved successfully", template, nil)
 }
 
-// GetTemplates handles GET /api/v1/venue-templates
 func (c *Controller) GetTemplates(ctx *gin.Context) {
 	var filters TemplateFilters
 	if err := ctx.ShouldBindQuery(&filters); err != nil {
@@ -75,7 +69,6 @@ func (c *Controller) GetTemplates(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Templates retrieved successfully", result, nil)
 }
 
-// UpdateTemplate handles PUT /api/v1/venue-templates/:id
 func (c *Controller) UpdateTemplate(ctx *gin.Context) {
 	id := ctx.Param("id")
 	if id == "" {
@@ -102,7 +95,6 @@ func (c *Controller) UpdateTemplate(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Template updated successfully", template, nil)
 }
 
-// DeleteTemplate handles DELETE /api/v1/venue-templates/:id
 func (c *Controller) DeleteTemplate(ctx *gin.Context) {
 	id := ctx.Param("id")
 	if id == "" {
@@ -123,9 +115,8 @@ func (c *Controller) DeleteTemplate(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Template deleted successfully", nil, nil)
 }
 
-// ============= VENUE SECTIONS =============
+// VENUE SECTIONS
 
-// CreateSection handles POST /api/v1/venue-templates/:id/sections
 func (c *Controller) CreateSection(ctx *gin.Context) {
 	templateID := ctx.Param("id")
 	if templateID == "" {
@@ -148,7 +139,6 @@ func (c *Controller) CreateSection(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusCreated, "Section created successfully", section, nil)
 }
 
-// GetSectionsByEventID handles GET /api/v1/events/:eventId/sections
 func (c *Controller) GetSectionsByEventID(ctx *gin.Context) {
 	eventID := ctx.Param("eventId")
 	if eventID == "" {
@@ -165,7 +155,6 @@ func (c *Controller) GetSectionsByEventID(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Sections retrieved successfully", sections, nil)
 }
 
-// GetSectionsByTemplateID handles GET /api/v1/venue-templates/:id/sections
 func (c *Controller) GetSectionsByTemplateID(ctx *gin.Context) {
 	templateID := ctx.Param("id")
 	if templateID == "" {
@@ -182,7 +171,6 @@ func (c *Controller) GetSectionsByTemplateID(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Sections retrieved successfully", sections, nil)
 }
 
-// GetVenueLayout handles GET /api/v1/events/:eventId/venue/layout
 func (c *Controller) GetVenueLayout(ctx *gin.Context) {
 	eventID := ctx.Param("eventId")
 	if eventID == "" {
@@ -203,7 +191,6 @@ func (c *Controller) GetVenueLayout(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Venue layout retrieved successfully", layout, nil)
 }
 
-// UpdateSection handles PUT /api/v1/sections/:id
 func (c *Controller) UpdateSection(ctx *gin.Context) {
 	id := ctx.Param("id")
 	if id == "" {
@@ -230,7 +217,6 @@ func (c *Controller) UpdateSection(ctx *gin.Context) {
 	response.RespondJSON(ctx, "success", http.StatusOK, "Section updated successfully", section, nil)
 }
 
-// DeleteSection handles DELETE /api/v1/sections/:id
 func (c *Controller) DeleteSection(ctx *gin.Context) {
 	id := ctx.Param("id")
 	if id == "" {
@@ -249,26 +235,4 @@ func (c *Controller) DeleteSection(ctx *gin.Context) {
 	}
 
 	response.RespondJSON(ctx, "success", http.StatusOK, "Section deleted successfully", nil, nil)
-}
-
-// ============= HELPER FUNCTIONS =============
-
-// parsePageLimit parses page and limit from query parameters
-func parsePageLimit(ctx *gin.Context) (int, int) {
-	page := 1
-	limit := 20
-
-	if pageStr := ctx.Query("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
-	}
-
-	if limitStr := ctx.Query("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
-			limit = l
-		}
-	}
-
-	return page, limit
 }

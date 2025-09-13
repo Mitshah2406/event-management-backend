@@ -25,7 +25,7 @@ type VenueTemplate struct {
 	Description        string    `json:"description"`
 	DefaultRows        int       `json:"default_rows"`
 	DefaultSeatsPerRow int       `json:"default_seats_per_row"`
-	LayoutType         string    `gorm:"type:varchar(20);check:layout_type IN ('THEATER', 'STADIUM', 'CONFERENCE', 'GENERAL')" json:"layout_type"`
+	LayoutType         string    `gorm:"type:varchar(20);index;check:layout_type IN ('THEATER', 'STADIUM', 'CONFERENCE', 'GENERAL')" json:"layout_type"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 }
@@ -78,137 +78,6 @@ func (VenueSection) TableName() string {
 // TableName sets the table name for EventPricing
 func (EventPricing) TableName() string {
 	return "event_pricing"
-}
-
-// VenueLayoutResponse represents the venue layout for an event
-type VenueLayoutResponse struct {
-	EventID        string                 `json:"event_id"`
-	EventName      string                 `json:"event_name"`
-	VenueInfo      VenueInfo              `json:"venue_info"`
-	BasePrice      float64                `json:"base_price"`
-	Sections       []VenueSectionResponse `json:"sections"`
-	TotalSeats     int                    `json:"total_seats"`
-	AvailableSeats int                    `json:"available_seats"`
-}
-
-// VenueInfo represents basic venue information
-type VenueInfo struct {
-	TemplateID   string `json:"template_id"`
-	TemplateName string `json:"template_name"`
-	LayoutType   string `json:"layout_type"`
-	Description  string `json:"description"`
-}
-
-// VenueSectionResponse represents venue section with seat details
-type VenueSectionResponse struct {
-	ID              string         `json:"id"`
-	Name            string         `json:"name"`
-	PriceMultiplier float64        `json:"price_multiplier"`
-	Price           float64        `json:"price"`
-	RowStart        string         `json:"row_start"`
-	RowEnd          string         `json:"row_end"`
-	SeatsPerRow     int            `json:"seats_per_row"`
-	TotalSeats      int            `json:"total_seats"`
-	AvailableSeats  int            `json:"available_seats"`
-	Seats           []SeatResponse `json:"seats"`
-}
-
-// SeatResponse represents individual seat information
-type SeatResponse struct {
-	ID         string  `json:"id"`
-	SeatNumber string  `json:"seat_number"`
-	Row        string  `json:"row"`
-	Position   int     `json:"position"`
-	Status     string  `json:"status"`
-	Price      float64 `json:"price"`
-	IsHeld     bool    `json:"is_held"`
-}
-
-// SeatHoldRequest represents seat holding request
-type SeatHoldRequest struct {
-	EventID string   `json:"event_id" binding:"required,uuid"`
-	SeatIDs []string `json:"seat_ids" binding:"required,min=1,max=10"`
-	UserID  string   `json:"user_id" binding:"required,uuid"`
-}
-
-// SeatHoldResponse represents seat holding response
-type SeatHoldResponse struct {
-	HoldID     string         `json:"hold_id"`
-	EventID    string         `json:"event_id"`
-	UserID     string         `json:"user_id"`
-	Seats      []HeldSeatInfo `json:"seats"`
-	TotalPrice float64        `json:"total_price"`
-	ExpiresAt  time.Time      `json:"expires_at"`
-	TTL        int            `json:"ttl_seconds"`
-}
-
-// HeldSeatInfo represents information about held seats
-type HeldSeatInfo struct {
-	SeatID      string  `json:"seat_id"`
-	SectionID   string  `json:"section_id"`
-	SeatNumber  string  `json:"seat_number"`
-	Row         string  `json:"row"`
-	SectionName string  `json:"section_name"`
-	Price       float64 `json:"price"`
-}
-
-// Request/Response models for venue templates
-type CreateTemplateRequest struct {
-	Name               string `json:"name" binding:"required,min=3,max=255"`
-	Description        string `json:"description" binding:"max=1000"`
-	DefaultRows        int    `json:"default_rows" binding:"required,min=1,max=50"`
-	DefaultSeatsPerRow int    `json:"default_seats_per_row" binding:"required,min=1,max=100"`
-	LayoutType         string `json:"layout_type" binding:"required,oneof=THEATER STADIUM CONFERENCE GENERAL"`
-}
-
-type UpdateTemplateRequest struct {
-	Name               *string `json:"name" binding:"omitempty,min=3,max=255"`
-	Description        *string `json:"description" binding:"omitempty,max=1000"`
-	DefaultRows        *int    `json:"default_rows" binding:"omitempty,min=1,max=50"`
-	DefaultSeatsPerRow *int    `json:"default_seats_per_row" binding:"omitempty,min=1,max=100"`
-	LayoutType         *string `json:"layout_type" binding:"omitempty,oneof=THEATER STADIUM CONFERENCE GENERAL"`
-}
-
-// Request/Response models for venue sections
-type CreateSectionRequest struct {
-	TemplateID  string `json:"template_id" binding:"required,uuid"`
-	Name        string `json:"name" binding:"required,min=1,max=255"`
-	Description string `json:"description" binding:"omitempty,max=500"`
-	RowStart    string `json:"row_start" binding:"max=10"`
-	RowEnd      string `json:"row_end" binding:"max=10"`
-	SeatsPerRow int    `json:"seats_per_row" binding:"required,min=1,max=100"`
-	TotalSeats  int    `json:"total_seats" binding:"required,min=1"`
-}
-
-type UpdateSectionRequest struct {
-	Name        *string `json:"name" binding:"omitempty,min=1,max=255"`
-	Description *string `json:"description" binding:"omitempty,max=500"`
-	RowStart    *string `json:"row_start" binding:"omitempty,max=10"`
-	RowEnd      *string `json:"row_end" binding:"omitempty,max=10"`
-	SeatsPerRow *int    `json:"seats_per_row" binding:"omitempty,min=1,max=100"`
-	TotalSeats  *int    `json:"total_seats" binding:"omitempty,min=1"`
-}
-
-// Request/Response models for event pricing
-type CreateEventPricingRequest struct {
-	EventID         string  `json:"event_id" binding:"required,uuid"`
-	SectionID       string  `json:"section_id" binding:"required,uuid"`
-	PriceMultiplier float64 `json:"price_multiplier" binding:"required,min=0.1,max=10"`
-}
-
-type UpdateEventPricingRequest struct {
-	PriceMultiplier *float64 `json:"price_multiplier" binding:"omitempty,min=0.1,max=10"`
-	IsActive        *bool    `json:"is_active"`
-}
-
-type EventPricingResponse struct {
-	ID              string  `json:"id"`
-	EventID         string  `json:"event_id"`
-	SectionID       string  `json:"section_id"`
-	SectionName     string  `json:"section_name"`
-	PriceMultiplier float64 `json:"price_multiplier"`
-	Price           float64 `json:"price"`
-	IsActive        bool    `json:"is_active"`
 }
 
 // Helper methods for event pricing calculations
