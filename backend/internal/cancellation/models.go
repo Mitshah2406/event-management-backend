@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// CancellationPolicy defines the cancellation policy for events
 type CancellationPolicy struct {
 	ID                   uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	EventID              uuid.UUID `gorm:"type:uuid;unique;not null" json:"event_id"`
@@ -19,8 +18,6 @@ type CancellationPolicy struct {
 	UpdatedAt            time.Time `json:"updated_at"`
 }
 
-// Cancellation defines the structure for booking cancellations
-// Note: Cancellations are automatically processed upon request for better UX
 type Cancellation struct {
 	ID              uuid.UUID  `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	BookingID       uuid.UUID  `gorm:"type:uuid;unique;not null" json:"booking_id"`
@@ -34,12 +31,10 @@ type Cancellation struct {
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
-// TableName sets the table name for CancellationPolicy
 func (CancellationPolicy) TableName() string {
 	return "cancellation_policies"
 }
 
-// TableName sets the table name for Cancellation
 func (Cancellation) TableName() string {
 	return "cancellations"
 }

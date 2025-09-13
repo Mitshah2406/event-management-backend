@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Service interface defines the contract for cancellation business logic
 type Service interface {
 	// Cancellation Policy management
 	CreateCancellationPolicy(ctx context.Context, eventID uuid.UUID, req CancellationPolicyRequest) (*CancellationPolicy, error)
@@ -25,18 +24,15 @@ type Service interface {
 	ValidateCancellationEligibility(ctx context.Context, bookingID uuid.UUID) error
 }
 
-// BookingService interface for booking-related operations (to avoid circular dependency)
 type BookingService interface {
 	GetBooking(ctx context.Context, bookingID uuid.UUID) (BookingInfo, error)
 	CancelBookingInternal(ctx context.Context, bookingID uuid.UUID) error
 }
 
-// WaitlistService interface for waitlist operations (to avoid circular dependency)
 type WaitlistService interface {
 	ProcessCancellation(ctx context.Context, eventID uuid.UUID, freedTickets int) error
 }
 
-// BookingInfo represents booking information for cancellation calculations
 type BookingInfo struct {
 	ID         uuid.UUID `json:"id"`
 	UserID     uuid.UUID `json:"user_id"`
@@ -48,7 +44,6 @@ type BookingInfo struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-// CancellationPolicyRequest represents a request to create/update cancellation policy
 type CancellationPolicyRequest struct {
 	AllowCancellation    bool      `json:"allow_cancellation" binding:"required"`
 	CancellationDeadline time.Time `json:"cancellation_deadline" binding:"required"`
@@ -57,19 +52,16 @@ type CancellationPolicyRequest struct {
 	RefundProcessingDays int       `json:"refund_processing_days" binding:"min=1,max=30"`
 }
 
-// CancellationRequest represents a request to cancel a booking
 type CancellationRequest struct {
-	Reason string `json:"reason" binding:"required,min=10,max=500"`
+	Reason string `json:"reason" binding:"required,min=1,max=500"`
 }
 
-// service implements the Service interface
 type service struct {
 	repo            Repository
 	bookingService  BookingService
 	waitlistService WaitlistService
 }
 
-// NewService creates a new cancellation service instance
 func NewService(repo Repository, bookingService BookingService, waitlistService WaitlistService) Service {
 	return &service{
 		repo:            repo,
@@ -78,7 +70,6 @@ func NewService(repo Repository, bookingService BookingService, waitlistService 
 	}
 }
 
-// CreateCancellationPolicy creates a new cancellation policy for an event
 func (s *service) CreateCancellationPolicy(ctx context.Context, eventID uuid.UUID, req CancellationPolicyRequest) (*CancellationPolicy, error) {
 	// Check if policy already exists
 	_, err := s.repo.GetCancellationPolicyByEventID(ctx, eventID)
@@ -108,12 +99,10 @@ func (s *service) CreateCancellationPolicy(ctx context.Context, eventID uuid.UUI
 	return policy, nil
 }
 
-// GetCancellationPolicy retrieves a cancellation policy by event ID
 func (s *service) GetCancellationPolicy(ctx context.Context, eventID uuid.UUID) (*CancellationPolicy, error) {
 	return s.repo.GetCancellationPolicyByEventID(ctx, eventID)
 }
 
-// UpdateCancellationPolicy updates an existing cancellation policy
 func (s *service) UpdateCancellationPolicy(ctx context.Context, eventID uuid.UUID, req CancellationPolicyRequest) (*CancellationPolicy, error) {
 	// Get existing policy
 	policy, err := s.repo.GetCancellationPolicyByEventID(ctx, eventID)
@@ -141,7 +130,6 @@ func (s *service) UpdateCancellationPolicy(ctx context.Context, eventID uuid.UUI
 	return policy, nil
 }
 
-// RequestCancellation processes a cancellation request
 func (s *service) RequestCancellation(ctx context.Context, bookingID uuid.UUID, userID uuid.UUID, req CancellationRequest) (*Cancellation, error) {
 	// Get booking information
 	booking, err := s.bookingService.GetBooking(ctx, bookingID)
@@ -189,8 +177,6 @@ func (s *service) RequestCancellation(ctx context.Context, bookingID uuid.UUID, 
 
 	// Update booking status to CANCELLED and free up seats
 	if err := s.bookingService.CancelBookingInternal(ctx, bookingID); err != nil {
-		// Log error but don't fail the cancellation since refund record is already created
-		// TODO: Add proper logging here
 		return cancellation, fmt.Errorf("cancellation created but failed to update booking status: %w", err)
 	}
 
@@ -214,17 +200,14 @@ func (s *service) RequestCancellation(ctx context.Context, bookingID uuid.UUID, 
 	return cancellation, nil
 }
 
-// GetCancellation retrieves a cancellation by ID
 func (s *service) GetCancellation(ctx context.Context, cancellationID uuid.UUID) (*Cancellation, error) {
 	return s.repo.GetCancellationByID(ctx, cancellationID)
 }
 
-// GetUserCancellations retrieves all cancellations for a user
 func (s *service) GetUserCancellations(ctx context.Context, userID uuid.UUID) ([]Cancellation, error) {
 	return s.repo.GetCancellationsByUserID(ctx, userID)
 }
 
-// CalculateCancellationFee calculates the cancellation fee and refund amount
 func (s *service) CalculateCancellationFee(ctx context.Context, bookingID uuid.UUID) (float64, float64, error) {
 	// Get booking information
 	booking, err := s.bookingService.GetBooking(ctx, bookingID)
@@ -263,7 +246,6 @@ func (s *service) CalculateCancellationFee(ctx context.Context, bookingID uuid.U
 	return cancellationFee, refundAmount, nil
 }
 
-// ValidateCancellationEligibility checks if a booking can be cancelled
 func (s *service) ValidateCancellationEligibility(ctx context.Context, bookingID uuid.UUID) error {
 	// Get booking information
 	booking, err := s.bookingService.GetBooking(ctx, bookingID)
@@ -295,7 +277,6 @@ func (s *service) ValidateCancellationEligibility(ctx context.Context, bookingID
 	return nil
 }
 
-// validatePolicyRequest validates a cancellation policy request
 func (s *service) validatePolicyRequest(req CancellationPolicyRequest) error {
 	if req.FeeType == "FIXED" && req.FeeAmount <= 0 {
 		return fmt.Errorf("fixed fee amount must be greater than 0")

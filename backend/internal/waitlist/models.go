@@ -125,42 +125,6 @@ type WaitlistAnalytics struct {
 	UpdatedAt          time.Time `json:"updated_at" gorm:"autoUpdateTime" db:"updated_at"`
 }
 
-// Note: Kafka-related types have been removed as part of notification system simplification.
-// Waitlist notifications now use the unified notification system directly.
-
-// Request/Response Models
-
-// JoinWaitlistRequest represents a request to join a waitlist
-type JoinWaitlistRequest struct {
-	EventID     uuid.UUID `json:"event_id" validate:"required"`
-	Quantity    int       `json:"quantity" validate:"required,min=1,max=10"`
-	Preferences JSONMap   `json:"preferences,omitempty"`
-}
-
-// WaitlistResponse represents the response when joining/checking waitlist status
-type WaitlistResponse struct {
-	ID            uuid.UUID      `json:"id"`
-	EventID       uuid.UUID      `json:"event_id"`
-	Position      int            `json:"position"`
-	Quantity      int            `json:"quantity"`
-	Status        WaitlistStatus `json:"status"`
-	EstimatedWait *time.Duration `json:"estimated_wait,omitempty"`
-	Preferences   JSONMap        `json:"preferences,omitempty"`
-	JoinedAt      time.Time      `json:"joined_at"`
-	NotifiedAt    *time.Time     `json:"notified_at,omitempty"`
-	ExpiresAt     *time.Time     `json:"expires_at,omitempty"`
-}
-
-// WaitlistStatsResponse represents waitlist statistics for an event
-type WaitlistStatsResponse struct {
-	EventID         uuid.UUID `json:"event_id"`
-	TotalInQueue    int       `json:"total_in_queue"`
-	ActiveInQueue   int       `json:"active_in_queue"`
-	NotifiedCount   int       `json:"notified_count"`
-	ConvertedCount  int       `json:"converted_count"`
-	AverageWaitTime *int      `json:"average_wait_time_minutes,omitempty"`
-}
-
 // Redis Key Helpers
 
 // GetQueueKey returns the Redis key for an event's waitlist queue

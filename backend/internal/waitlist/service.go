@@ -9,19 +9,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// NotificationService defines the interface for sending notifications (to avoid import cycles)
 type NotificationService interface {
 	SendWaitlistNotification(ctx context.Context, userID uuid.UUID, email, name string,
 		eventID, waitlistEntryID uuid.UUID, notificationType string,
 		templateData map[string]interface{}) error
 }
 
-// UserService defines the interface for fetching user details (to avoid import cycles)
 type UserService interface {
 	GetUserByID(ctx context.Context, userID uuid.UUID) (email, firstName, lastName string, err error)
 }
 
-// Service interface defines the contract for waitlist business operations
 type Service interface {
 	// Core waitlist operations
 	JoinWaitlist(ctx context.Context, userID uuid.UUID, request *JoinWaitlistRequest) (*WaitlistResponse, error)
@@ -49,7 +46,6 @@ type Service interface {
 	GetWaitlistStatusForBooking(ctx context.Context, userID, eventID uuid.UUID) (*WaitlistStatusForBooking, error)
 }
 
-// service implements the Service interface
 type service struct {
 	repo                Repository
 	notificationService NotificationService
@@ -57,7 +53,6 @@ type service struct {
 	config              *ServiceConfig
 }
 
-// ServiceConfig contains configuration for the waitlist service
 type ServiceConfig struct {
 	BookingWindowDuration time.Duration
 	MaxWaitlistSize       int
@@ -65,7 +60,6 @@ type ServiceConfig struct {
 	NotificationTimeout   time.Duration
 }
 
-// DefaultServiceConfig returns default service configuration
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
 		BookingWindowDuration: BookingWindowDuration,
@@ -75,7 +69,6 @@ func DefaultServiceConfig() *ServiceConfig {
 	}
 }
 
-// NewService creates a new waitlist service
 func NewService(repo Repository, notificationService NotificationService, userService UserService, config *ServiceConfig) Service {
 	if config == nil {
 		config = DefaultServiceConfig()
@@ -89,7 +82,7 @@ func NewService(repo Repository, notificationService NotificationService, userSe
 	}
 }
 
-// JoinWaitlist adds a user to an event's waitlist
+// adds a user to an event's waitlist
 func (s *service) JoinWaitlist(ctx context.Context, userID uuid.UUID, request *JoinWaitlistRequest) (*WaitlistResponse, error) {
 	// Validate request
 	if err := s.validateJoinRequest(request); err != nil {
@@ -158,7 +151,6 @@ func (s *service) JoinWaitlist(ctx context.Context, userID uuid.UUID, request *J
 	return response, nil
 }
 
-// LeaveWaitlist removes a user from an event's waitlist
 func (s *service) LeaveWaitlist(ctx context.Context, userID, eventID uuid.UUID) error {
 	// Get existing entry
 	entry, err := s.repo.GetEntry(ctx, userID, eventID)
@@ -195,7 +187,6 @@ func (s *service) LeaveWaitlist(ctx context.Context, userID, eventID uuid.UUID) 
 	return nil
 }
 
-// GetWaitlistStatus gets a user's current waitlist status
 func (s *service) GetWaitlistStatus(ctx context.Context, userID, eventID uuid.UUID) (*WaitlistResponse, error) {
 	// Get entry from database
 	entry, err := s.repo.GetEntry(ctx, userID, eventID)
@@ -297,12 +288,10 @@ func (s *service) ProcessCancellation(ctx context.Context, eventID uuid.UUID, fr
 	return nil
 }
 
-// NotifyNextInLine notifies the next users in line when tickets become available
 func (s *service) NotifyNextInLine(ctx context.Context, eventID uuid.UUID, availableTickets int) error {
 	return s.ProcessCancellation(ctx, eventID, availableTickets)
 }
 
-// ProcessBookingExpiry handles expired booking windows
 func (s *service) ProcessBookingExpiry(ctx context.Context, userID, eventID uuid.UUID) error {
 	entry, err := s.repo.GetEntry(ctx, userID, eventID)
 	if err != nil {
@@ -338,7 +327,6 @@ func (s *service) ProcessBookingExpiry(ctx context.Context, userID, eventID uuid
 	return nil
 }
 
-// sendSpotAvailableNotification sends a spot available notification
 func (s *service) sendSpotAvailableNotification(ctx context.Context, entry *WaitlistEntry) error {
 	// Get real user details from user service
 	userEmail, firstName, lastName, err := s.userService.GetUserByID(ctx, entry.UserID)
@@ -401,7 +389,6 @@ func (s *service) sendSpotAvailableNotification(ctx context.Context, entry *Wait
 	return nil
 }
 
-// NotifyPositionUpdate sends position updates to all users in waitlist
 func (s *service) NotifyPositionUpdate(ctx context.Context, eventID uuid.UUID) error {
 	entries, err := s.repo.ListEntries(ctx, eventID, WaitlistStatusActive)
 	if err != nil {
@@ -579,7 +566,6 @@ func (s *service) MarkAsConverted(ctx context.Context, userID, eventID, bookingI
 	err = s.repo.RemoveFromQueue(ctx, userID, eventID)
 	if err != nil {
 		log.Printf("❌ MARK AS CONVERTED: Failed to remove user %s from Redis queue: %v", userID, err)
-		// Don't return error as the main goal (marking as converted) succeeded
 	} else {
 		log.Printf("✅ MARK AS CONVERTED: Successfully removed user %s from Redis queue", userID)
 	}

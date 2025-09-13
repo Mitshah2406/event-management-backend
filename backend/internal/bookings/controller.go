@@ -16,9 +16,8 @@ func NewController(service Service) *Controller {
 	return &Controller{service: service}
 }
 
-// ConfirmBooking handles POST /api/v1/bookings/confirm
 func (c *Controller) ConfirmBooking(ctx *gin.Context) {
-	// Get user ID from JWT context (set by middleware)
+	// Get user ID from JWT
 	userIDInterface, exists := ctx.Get("user_id")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
@@ -37,7 +36,6 @@ func (c *Controller) ConfirmBooking(ctx *gin.Context) {
 		return
 	}
 
-	// Parse request body
 	var req BookingConfirmationRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -63,9 +61,8 @@ func (c *Controller) ConfirmBooking(ctx *gin.Context) {
 	})
 }
 
-// GetBooking handles GET /api/v1/bookings/:id
 func (c *Controller) GetBooking(ctx *gin.Context) {
-	// Parse booking ID from URL
+
 	bookingIDStr := ctx.Param("id")
 	bookingID, err := uuid.Parse(bookingIDStr)
 	if err != nil {
@@ -73,7 +70,7 @@ func (c *Controller) GetBooking(ctx *gin.Context) {
 		return
 	}
 
-	// Get user ID from JWT context
+	// user ID from JWT
 	userIDInterface, exists := ctx.Get("user_id")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
@@ -117,9 +114,8 @@ func (c *Controller) GetBooking(ctx *gin.Context) {
 	})
 }
 
-// GetUserBookings handles GET /api/v1/users/bookings
 func (c *Controller) GetUserBookings(ctx *gin.Context) {
-	// Get user ID from JWT context
+
 	userIDInterface, exists := ctx.Get("user_id")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
@@ -173,7 +169,6 @@ func (c *Controller) GetUserBookings(ctx *gin.Context) {
 	})
 }
 
-// CancelBooking handles POST /api/v1/bookings/:id/cancel
 func (c *Controller) CancelBooking(ctx *gin.Context) {
 	// Parse booking ID from URL
 	bookingIDStr := ctx.Param("id")

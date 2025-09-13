@@ -6,14 +6,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// Booking defines the main booking structure
+// Booking schema
 type Booking struct {
 	ID          uuid.UUID  `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	UserID      uuid.UUID  `gorm:"type:uuid;index;not null" json:"user_id"`
 	EventID     uuid.UUID  `gorm:"type:uuid;index;not null" json:"event_id"`
 	TotalSeats  int        `gorm:"not null" json:"total_seats"`
 	TotalPrice  float64    `gorm:"not null" json:"total_price"`
-	Status      string     `gorm:"type:varchar(20);check:status IN ('CONFIRMED', 'CANCELLED');default:'CONFIRMED'" json:"status"`
+	Status      string     `gorm:"type:varchar(20);check:status IN ('CONFIRMED', 'CANCELLED');default:'CONFIRMED';index" json:"status"`
 	BookingRef  string     `gorm:"unique;not null" json:"booking_ref"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
@@ -24,7 +24,7 @@ type Booking struct {
 	Payments     []Payment     `json:"payments,omitempty" gorm:"foreignKey:BookingID;constraint:OnDelete:RESTRICT;"`
 }
 
-// SeatBooking defines the structure for individual seat bookings
+// SeatBooking schema
 type SeatBooking struct {
 	ID        uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	BookingID uuid.UUID `gorm:"type:uuid;index;not null" json:"booking_id"`
@@ -38,12 +38,12 @@ type SeatBooking struct {
 	Seat    *Seat    `json:"seat,omitempty" gorm:"foreignKey:SeatID;constraint:OnDelete:RESTRICT;"`
 }
 
-// Payment defines the structure for payment tracking
+// Payment schema
 type Payment struct {
 	ID            uuid.UUID  `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	BookingID     uuid.UUID  `gorm:"type:uuid;index;not null" json:"booking_id"`
 	Amount        float64    `gorm:"not null" json:"amount"`
-	Currency      string     `gorm:"type:varchar(3);default:'USD'" json:"currency"`
+	Currency      string     `gorm:"type:varchar(3);default:'INR'" json:"currency"`
 	Status        string     `gorm:"type:varchar(20);check:status IN ('PENDING', 'COMPLETED', 'FAILED', 'REFUNDED');default:'PENDING'" json:"status"`
 	PaymentMethod string     `gorm:"type:varchar(50)" json:"payment_method"`
 	TransactionID string     `gorm:"unique" json:"transaction_id"`
@@ -66,62 +66,18 @@ type Seat struct {
 	Status     string    `json:"status"`
 }
 
-// TableName sets the table name for Booking
 func (Booking) TableName() string {
 	return "bookings"
 }
 
-// TableName sets the table name for SeatBooking
 func (SeatBooking) TableName() string {
 	return "seat_bookings"
 }
 
-// TableName sets the table name for Payment
 func (Payment) TableName() string {
 	return "payments"
 }
 
-// BookingConfirmationRequest represents booking confirmation request
-type BookingConfirmationRequest struct {
-	HoldID        string `json:"hold_id" binding:"required"`
-	EventID       string `json:"event_id" binding:"required,uuid"`
-	PaymentMethod string `json:"payment_method" binding:"required"`
-}
-
-// BookingConfirmationResponse represents booking confirmation response
-type BookingConfirmationResponse struct {
-	BookingID  string           `json:"booking_id"`
-	BookingRef string           `json:"booking_ref"`
-	Status     string           `json:"status"`
-	TotalPrice float64          `json:"total_price"`
-	TotalSeats int              `json:"total_seats"`
-	Seats      []BookedSeatInfo `json:"seats"`
-	Payment    PaymentInfo      `json:"payment"`
-	CreatedAt  time.Time        `json:"created_at"`
-}
-
-// BookedSeatInfo represents information about booked seats
-type BookedSeatInfo struct {
-	SeatID      string  `json:"seat_id"`
-	SectionID   string  `json:"section_id"`
-	SeatNumber  string  `json:"seat_number"`
-	Row         string  `json:"row"`
-	SectionName string  `json:"section_name"`
-	Price       float64 `json:"price"`
-}
-
-// PaymentInfo represents payment information in responses
-type PaymentInfo struct {
-	ID            string     `json:"id"`
-	Amount        float64    `json:"amount"`
-	Currency      string     `json:"currency"`
-	Status        string     `json:"status"`
-	PaymentMethod string     `json:"payment_method"`
-	TransactionID string     `json:"transaction_id"`
-	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
-}
-
-// Helper methods for booking management
 func (b *Booking) IsConfirmed() bool {
 	return b.Status == "CONFIRMED"
 }
@@ -170,7 +126,6 @@ func (p *Payment) MarkFailed(reason string) {
 	p.UpdatedAt = now
 }
 
-// Convert Payment to PaymentInfo
 func (p *Payment) ToPaymentInfo() PaymentInfo {
 	return PaymentInfo{
 		ID:            p.ID.String(),

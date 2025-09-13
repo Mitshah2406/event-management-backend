@@ -10,11 +10,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// NotificationProducer interface defines the contract for publishing notifications
 type NotificationProducer interface {
 	PublishNotification(ctx context.Context, notification *UnifiedNotification) error
 	PublishBatchNotifications(ctx context.Context, notifications []*UnifiedNotification) error
-	PublishScheduledNotification(ctx context.Context, notification *UnifiedNotification, scheduleTime time.Time) error
 	Close() error
 	HealthCheck(ctx context.Context) error
 }
@@ -23,8 +21,6 @@ type NotificationProducer interface {
 type KafkaProducerConfig struct {
 	Brokers             []string
 	NotificationTopic   string
-	ScheduledTopic      string
-	DeadLetterTopic     string
 	RetryMax            int
 	TimeoutMs           int
 	RequiredAcks        sarama.RequiredAcks
@@ -39,8 +35,6 @@ func DefaultKafkaProducerConfig() *KafkaProducerConfig {
 	return &KafkaProducerConfig{
 		Brokers:             []string{"localhost:9092"},
 		NotificationTopic:   "notifications",
-		ScheduledTopic:      "scheduled-notifications",
-		DeadLetterTopic:     "notifications-dlq",
 		RetryMax:            3,
 		TimeoutMs:           10000,             // 10 seconds
 		RequiredAcks:        sarama.WaitForAll, // Wait for all in-sync replicas
@@ -61,7 +55,6 @@ type KafkaNotificationProducer struct {
 func NewKafkaNotificationProducer(config *KafkaProducerConfig) (NotificationProducer, error) {
 	saramaConfig := sarama.NewConfig()
 
-	// Producer configuration
 	saramaConfig.Producer.Return.Successes = true
 	saramaConfig.Producer.Return.Errors = true
 	saramaConfig.Producer.RequiredAcks = config.RequiredAcks
@@ -71,12 +64,10 @@ func NewKafkaNotificationProducer(config *KafkaProducerConfig) (NotificationProd
 	saramaConfig.Producer.Idempotent = config.IdempotentWrites
 	saramaConfig.Producer.MaxMessageBytes = config.MaxMessageBytes
 
-	// Enable idempotent producer
 	if config.IdempotentWrites {
 		saramaConfig.Net.MaxOpenRequests = 1
 	}
 
-	// Use hash partitioner for consistent routing based on recipient
 	saramaConfig.Producer.Partitioner = sarama.NewHashPartitioner
 
 	// Create the producer
@@ -96,17 +87,13 @@ func NewKafkaNotificationProducer(config *KafkaProducerConfig) (NotificationProd
 
 // PublishNotification publishes a single notification to Kafka
 func (knp *KafkaNotificationProducer) PublishNotification(ctx context.Context, notification *UnifiedNotification) error {
-	// Update notification status
 	notification.Status = NotificationStatusQueued
 	notification.UpdatedAt = time.Now()
 
-	// Serialize notification to JSON
 	messageBytes, err := notification.ToJSON()
 	if err != nil {
 		return fmt.Errorf("failed to marshal notification: %w", err)
 	}
-
-	// Create Kafka message
 	message := &sarama.ProducerMessage{
 		Topic:     knp.config.NotificationTopic,
 		Key:       sarama.StringEncoder(notification.GetPartitionKey()),
@@ -138,7 +125,6 @@ func (knp *KafkaNotificationProducer) PublishBatchNotifications(ctx context.Cont
 
 	messages := make([]*sarama.ProducerMessage, 0, len(notifications))
 
-	// Create batch of messages
 	for _, notification := range notifications {
 		notification.Status = NotificationStatusQueued
 		notification.UpdatedAt = time.Now()
@@ -160,10 +146,8 @@ func (knp *KafkaNotificationProducer) PublishBatchNotifications(ctx context.Cont
 		messages = append(messages, message)
 	}
 
-	// Send messages in batch
 	err := knp.producer.SendMessages(messages)
 	if err != nil {
-		// Mark failed notifications
 		for _, notification := range notifications {
 			notification.Status = NotificationStatusFailed
 			errorStr := err.Error()
@@ -173,45 +157,6 @@ func (knp *KafkaNotificationProducer) PublishBatchNotifications(ctx context.Cont
 	}
 
 	log.Printf("📤 Batch of %d notifications published to Kafka topic: %s", len(messages), knp.config.NotificationTopic)
-	return nil
-}
-
-// PublishScheduledNotification publishes a notification to be sent at a specific time
-func (knp *KafkaNotificationProducer) PublishScheduledNotification(ctx context.Context, notification *UnifiedNotification, scheduleTime time.Time) error {
-	// Set scheduled time
-	notification.ScheduledFor = &scheduleTime
-	notification.Status = NotificationStatusPending
-
-	// Serialize notification to JSON
-	messageBytes, err := notification.ToJSON()
-	if err != nil {
-		return fmt.Errorf("failed to marshal scheduled notification: %w", err)
-	}
-
-	// Create message with schedule headers
-	headers := knp.createHeaders(notification)
-	headers = append(headers, sarama.RecordHeader{
-		Key:   []byte("scheduled_for"),
-		Value: []byte(scheduleTime.Format(time.RFC3339)),
-	})
-
-	message := &sarama.ProducerMessage{
-		Topic:     knp.config.ScheduledTopic,
-		Key:       sarama.StringEncoder(notification.GetPartitionKey()),
-		Value:     sarama.ByteEncoder(messageBytes),
-		Headers:   headers,
-		Timestamp: notification.CreatedAt,
-	}
-
-	// Send message
-	partition, offset, err := knp.producer.SendMessage(message)
-	if err != nil {
-		return fmt.Errorf("failed to send scheduled notification to Kafka: %w", err)
-	}
-
-	log.Printf("📅 Scheduled notification published - Topic: %s, Partition: %d, Offset: %d, Type: %s, ScheduledFor: %s",
-		knp.config.ScheduledTopic, partition, offset, notification.Type, scheduleTime.Format(time.RFC3339))
-
 	return nil
 }
 
@@ -337,24 +282,6 @@ func (knp *KafkaNotificationProducer) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-// ProducerMetrics contains metrics for monitoring producer performance
-type ProducerMetrics struct {
-	MessagesSent      int64
-	MessagesSucceeded int64
-	MessagesFailed    int64
-	BatchesSent       int64
-	LastMessageTime   time.Time
-	TotalBytes        int64
-}
-
-// GetMetrics returns current producer metrics (placeholder for future implementation)
-func (knp *KafkaNotificationProducer) GetMetrics() *ProducerMetrics {
-	// This would be implemented with actual metrics collection
-	return &ProducerMetrics{
-		LastMessageTime: time.Now(),
-	}
-}
-
 // NotificationPublisher provides a high-level interface for publishing different types of notifications
 type NotificationPublisher struct {
 	producer NotificationProducer
@@ -440,36 +367,6 @@ func (np *NotificationPublisher) generateSubject(notificationType NotificationTy
 			return fmt.Sprintf("✅ Booking Confirmed for %s", eventTitle)
 		}
 		return "✅ Your booking is confirmed!"
-
-	case NotificationTypeBookingCancelled:
-		if eventTitle, ok := data["event_title"]; ok {
-			return fmt.Sprintf("❌ Booking Cancelled for %s", eventTitle)
-		}
-		return "❌ Your booking has been cancelled"
-
-	case NotificationTypeEventCancelled:
-		if eventTitle, ok := data["event_title"]; ok {
-			return fmt.Sprintf("⚠️ Event Cancelled: %s", eventTitle)
-		}
-		return "⚠️ Event has been cancelled"
-
-	case NotificationTypeEventReminder:
-		if eventTitle, ok := data["event_title"]; ok {
-			return fmt.Sprintf("🔔 Reminder: %s starts soon", eventTitle)
-		}
-		return "🔔 Event reminder"
-
-	case NotificationTypePaymentSuccess:
-		return "💳 Payment processed successfully"
-
-	case NotificationTypePaymentFailed:
-		return "❌ Payment failed - Action required"
-
-	case NotificationTypeWelcome:
-		return "🎉 Welcome to Evently!"
-
-	case NotificationTypePasswordReset:
-		return "🔐 Password reset request"
 
 	default:
 		return "📧 Notification from Evently"

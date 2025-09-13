@@ -151,7 +151,7 @@ func (s *service) HoldSeats(ctx context.Context, req SeatHoldRequest) (*SeatHold
 		seatUUIDs = append(seatUUIDs, id)
 	}
 
-	// Check if seats exist and are available in Postgres (base availability)
+	// Check if seats exist and are available in Postgres (base availability) - checkmate
 	availability, err := s.repo.CheckSeatsAvailability(ctx, seatUUIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check seat availability: %w", err)

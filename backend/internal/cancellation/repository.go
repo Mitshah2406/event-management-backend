@@ -8,13 +8,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// Repository interface defines the contract for cancellation data operations
 type Repository interface {
 	// Cancellation Policy operations
 	CreateCancellationPolicy(ctx context.Context, policy *CancellationPolicy) error
 	GetCancellationPolicyByEventID(ctx context.Context, eventID uuid.UUID) (*CancellationPolicy, error)
 	UpdateCancellationPolicy(ctx context.Context, policy *CancellationPolicy) error
-	
+
 	// Cancellation operations
 	CreateCancellation(ctx context.Context, cancellation *Cancellation) error
 	GetCancellationByID(ctx context.Context, id uuid.UUID) (*Cancellation, error)
@@ -23,17 +22,14 @@ type Repository interface {
 	UpdateCancellation(ctx context.Context, cancellation *Cancellation) error
 }
 
-// repository implements the Repository interface
 type repository struct {
 	db *gorm.DB
 }
 
-// NewRepository creates a new cancellation repository instance
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }
 
-// CreateCancellationPolicy creates a new cancellation policy
 func (r *repository) CreateCancellationPolicy(ctx context.Context, policy *CancellationPolicy) error {
 	err := r.db.WithContext(ctx).Create(policy).Error
 	if err != nil {
@@ -42,7 +38,6 @@ func (r *repository) CreateCancellationPolicy(ctx context.Context, policy *Cance
 	return nil
 }
 
-// GetCancellationPolicyByEventID retrieves a cancellation policy by event ID
 func (r *repository) GetCancellationPolicyByEventID(ctx context.Context, eventID uuid.UUID) (*CancellationPolicy, error) {
 	var policy CancellationPolicy
 	err := r.db.WithContext(ctx).First(&policy, "event_id = ?", eventID).Error
@@ -55,7 +50,6 @@ func (r *repository) GetCancellationPolicyByEventID(ctx context.Context, eventID
 	return &policy, nil
 }
 
-// UpdateCancellationPolicy updates an existing cancellation policy
 func (r *repository) UpdateCancellationPolicy(ctx context.Context, policy *CancellationPolicy) error {
 	err := r.db.WithContext(ctx).Save(policy).Error
 	if err != nil {
@@ -64,7 +58,6 @@ func (r *repository) UpdateCancellationPolicy(ctx context.Context, policy *Cance
 	return nil
 }
 
-// CreateCancellation creates a new cancellation request
 func (r *repository) CreateCancellation(ctx context.Context, cancellation *Cancellation) error {
 	err := r.db.WithContext(ctx).Create(cancellation).Error
 	if err != nil {
@@ -73,7 +66,6 @@ func (r *repository) CreateCancellation(ctx context.Context, cancellation *Cance
 	return nil
 }
 
-// GetCancellationByID retrieves a cancellation by its ID
 func (r *repository) GetCancellationByID(ctx context.Context, id uuid.UUID) (*Cancellation, error) {
 	var cancellation Cancellation
 	err := r.db.WithContext(ctx).First(&cancellation, "id = ?", id).Error
@@ -86,25 +78,22 @@ func (r *repository) GetCancellationByID(ctx context.Context, id uuid.UUID) (*Ca
 	return &cancellation, nil
 }
 
-// GetCancellationsByUserID retrieves cancellations for a specific user
 func (r *repository) GetCancellationsByUserID(ctx context.Context, userID uuid.UUID) ([]Cancellation, error) {
 	var cancellations []Cancellation
-	
-	// Join with bookings table to filter by user_id
+
 	err := r.db.WithContext(ctx).
 		Joins("JOIN bookings ON cancellations.booking_id = bookings.id").
 		Where("bookings.user_id = ?", userID).
 		Order("cancellations.created_at DESC").
 		Find(&cancellations).Error
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user cancellations: %w", err)
 	}
-	
+
 	return cancellations, nil
 }
 
-// GetCancellationByBookingID retrieves a cancellation by booking ID
 func (r *repository) GetCancellationByBookingID(ctx context.Context, bookingID uuid.UUID) (*Cancellation, error) {
 	var cancellation Cancellation
 	err := r.db.WithContext(ctx).First(&cancellation, "booking_id = ?", bookingID).Error
@@ -117,7 +106,6 @@ func (r *repository) GetCancellationByBookingID(ctx context.Context, bookingID u
 	return &cancellation, nil
 }
 
-// UpdateCancellation updates an existing cancellation
 func (r *repository) UpdateCancellation(ctx context.Context, cancellation *Cancellation) error {
 	err := r.db.WithContext(ctx).Save(cancellation).Error
 	if err != nil {
