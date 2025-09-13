@@ -9,29 +9,34 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RateLimitType represents different endpoint types
 type RateLimitType string
 
 const (
-	RateLimitTypeDefault   RateLimitType = "default"
-	RateLimitTypePublic    RateLimitType = "public"
-	RateLimitTypeAuth      RateLimitType = "auth"
-	RateLimitTypeBooking   RateLimitType = "booking"
-	RateLimitTypeAdmin     RateLimitType = "admin"
-	RateLimitTypeAnalytics RateLimitType = "analytics"
+	RateLimitTypeDefault         RateLimitType = "default"
+	RateLimitTypePublic          RateLimitType = "public"
+	RateLimitTypeAuth            RateLimitType = "auth"
+	RateLimitTypeBooking         RateLimitType = "booking"
+	RateLimitTypeBookingCritical RateLimitType = "booking_critical"
+	RateLimitTypeAdmin           RateLimitType = "admin"
+	RateLimitTypeAnalytics       RateLimitType = "analytics"
+	RateLimitTypeUser            RateLimitType = "user"
+	RateLimitTypeHealth          RateLimitType = "health"
 )
 
-// Config holds rate limiting configuration
+// Enhanced Config with new rate limit types
 type Config struct {
-	Enabled           bool          `json:"enabled"`
-	WindowDuration    time.Duration `json:"window_duration"`
-	DefaultRequests   int           `json:"default_requests"`
-	PublicRequests    int           `json:"public_requests"`
-	AuthRequests      int           `json:"auth_requests"`
-	BookingRequests   int           `json:"booking_requests"`
-	AdminRequests     int           `json:"admin_requests"`
-	AnalyticsRequests int           `json:"analytics_requests"`
-	WhitelistedIPs    []string      `json:"whitelisted_ips"`
+	Enabled                 bool          `json:"enabled"`
+	WindowDuration          time.Duration `json:"window_duration"`
+	DefaultRequests         int           `json:"default_requests"`
+	PublicRequests          int           `json:"public_requests"`
+	AuthRequests            int           `json:"auth_requests"`
+	BookingRequests         int           `json:"booking_requests"`
+	BookingCriticalRequests int           `json:"booking_critical_requests"`
+	AdminRequests           int           `json:"admin_requests"`
+	AnalyticsRequests       int           `json:"analytics_requests"`
+	UserRequests            int           `json:"user_requests"`
+	HealthRequests          int           `json:"health_requests"`
+	WhitelistedIPs          []string      `json:"whitelisted_ips"`
 }
 
 // Result represents rate limit check result
@@ -48,7 +53,6 @@ type RateLimiter struct {
 	config *Config
 }
 
-// NewRateLimiter creates a new rate limiter
 func NewRateLimiter(client *redis.Client, config *Config) *RateLimiter {
 	return &RateLimiter{
 		client: client,
@@ -56,7 +60,7 @@ func NewRateLimiter(client *redis.Client, config *Config) *RateLimiter {
 	}
 }
 
-// IsAllowed checks if request is allowed
+// checks if request is allowed
 func (r *RateLimiter) IsAllowed(ctx context.Context, clientIP string, limitType RateLimitType) (*Result, error) {
 	if !r.config.Enabled {
 		limit := r.getLimit(limitType)
@@ -86,7 +90,7 @@ func (r *RateLimiter) IsAllowed(ctx context.Context, clientIP string, limitType 
 	return r.checkLimit(ctx, key, limit)
 }
 
-// checkLimit performs the actual rate limit check using sliding window
+// performs the actual rate limit check using sliding window
 func (r *RateLimiter) checkLimit(ctx context.Context, key string, limit int) (*Result, error) {
 	now := time.Now()
 	windowStart := now.Add(-r.config.WindowDuration)
@@ -144,7 +148,6 @@ func (r *RateLimiter) checkLimit(ctx context.Context, key string, limit int) (*R
 	}, nil
 }
 
-// getLimit returns the limit for a specific type
 func (r *RateLimiter) getLimit(limitType RateLimitType) int {
 	switch limitType {
 	case RateLimitTypePublic:
@@ -153,21 +156,26 @@ func (r *RateLimiter) getLimit(limitType RateLimitType) int {
 		return r.config.AuthRequests
 	case RateLimitTypeBooking:
 		return r.config.BookingRequests
+	case RateLimitTypeBookingCritical:
+		return r.config.BookingCriticalRequests
 	case RateLimitTypeAdmin:
 		return r.config.AdminRequests
 	case RateLimitTypeAnalytics:
 		return r.config.AnalyticsRequests
+	case RateLimitTypeUser:
+		return r.config.UserRequests
+	case RateLimitTypeHealth:
+		return r.config.HealthRequests
 	default:
 		return r.config.DefaultRequests
 	}
 }
 
-// isWhitelisted checks if IP is whitelisted
 func (r *RateLimiter) isWhitelisted(ip string) bool {
-	for _, whitelistedIP := range r.config.WhitelistedIPs {
-		if ip == whitelistedIP {
-			return true
-		}
-	}
-	return false
+	// for _, whitelistedIP := range r.config.WhitelistedIPs {
+	// 	if ip == whitelistedIP {
+	// 		return true
+	// 	}
+	// }
+	return false // whitelisting disabled for task
 }

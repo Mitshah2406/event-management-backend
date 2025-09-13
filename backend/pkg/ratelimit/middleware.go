@@ -11,19 +11,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Middleware creates a simple rate limiting middleware
+// rate limiting middleware
 func Middleware(rateLimiter *RateLimiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get client IP
 		clientIP := getClientIP(c)
-		
+
 		// Determine rate limit type from route
 		limitType := getRateLimitType(c.FullPath())
-		
+
 		// Check rate limit
 		result, err := rateLimiter.IsAllowed(c.Request.Context(), clientIP, limitType)
 		if err != nil {
-			response.RespondJSON(c, "error", http.StatusInternalServerError, 
+			response.RespondJSON(c, "error", http.StatusInternalServerError,
 				"Rate limit check failed", nil, nil)
 			c.Abort()
 			return
@@ -36,9 +36,9 @@ func Middleware(rateLimiter *RateLimiter) gin.HandlerFunc {
 
 		// Check if rate limited
 		if !result.Allowed {
-			response.RespondJSON(c, "error", http.StatusTooManyRequests, 
+			response.RespondJSON(c, "error", http.StatusTooManyRequests,
 				"Rate limit exceeded", nil, map[string]interface{}{
-					"limit": result.Limit,
+					"limit":      result.Limit,
 					"reset_time": result.ResetTime,
 				})
 			c.Abort()
@@ -49,25 +49,57 @@ func Middleware(rateLimiter *RateLimiter) gin.HandlerFunc {
 	}
 }
 
-// getRateLimitType determines rate limit type based on route
+// Alternative approach: More specific route matching
 func getRateLimitType(path string) RateLimitType {
 	switch {
-	case strings.Contains(path, "/auth/"):
-		return RateLimitTypeAuth
+	// Health/monitoring endpoints
+	case strings.HasPrefix(path, "/health"),
+		strings.HasPrefix(path, "/ping"),
+		strings.HasPrefix(path, "/status"):
+		return RateLimitTypeHealth
+
+	// Admin endpoints (catch-all for admin)
 	case strings.Contains(path, "/admin/"):
 		return RateLimitTypeAdmin
-	case strings.Contains(path, "/booking"):
-		return RateLimitTypeBooking
+
+	// Analytics endpoints
 	case strings.Contains(path, "/analytics"):
 		return RateLimitTypeAnalytics
-	case strings.Contains(path, "/events") || strings.Contains(path, "/tags"):
+
+	// Authentication endpoints
+	case strings.Contains(path, "/auth/"):
+		return RateLimitTypeAuth
+
+	// Critical booking flow endpoints
+	case strings.Contains(path, "/seats/hold"),
+		strings.Contains(path, "/seats/availability"),
+		strings.Contains(path, "/bookings/confirm"),
+		strings.Contains(path, "/bookings/") && (strings.Contains(path, "/cancel") || strings.Contains(path, "request-cancel")):
+		return RateLimitTypeBookingCritical // New stricter type
+
+	// Other booking-related endpoints
+	case strings.Contains(path, "/booking") ||
+		strings.Contains(path, "/seats") ||
+		strings.Contains(path, "/waitlist") ||
+		strings.Contains(path, "/cancellation"):
+		return RateLimitTypeBooking
+
+	// Public browsing endpoints
+	case strings.Contains(path, "/events"),
+		strings.Contains(path, "/tags"),
+		strings.Contains(path, "/sections"):
 		return RateLimitTypePublic
+
+	// User-specific endpoints
+	case strings.Contains(path, "/users/"):
+		return RateLimitTypeUser // New type for user operations
+
 	default:
 		return RateLimitTypeDefault
 	}
 }
 
-// getClientIP extracts real client IP
+// extracts real client IP
 func getClientIP(c *gin.Context) string {
 	// Check X-Forwarded-For header
 	xForwardedFor := c.GetHeader("X-Forwarded-For")
@@ -94,6 +126,6 @@ func getClientIP(c *gin.Context) string {
 	if err != nil {
 		return c.Request.RemoteAddr
 	}
-	
+
 	return ip
 }

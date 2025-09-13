@@ -117,7 +117,7 @@ func (r *Router) SetupRoutes(engine *gin.Engine) {
 func (r *Router) setupHealthRoutes(engine *gin.Engine) {
 	engine.GET("/health", func(c *gin.Context) {
 		// Perform health checks
-		if err := r.db.HealthCheck(c.Request.Context()); err != nil {
+		if err := r.db.HealthCheckDB(c.Request.Context()); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status":    "unhealthy",
 				"error":     err.Error(),

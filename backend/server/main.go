@@ -44,7 +44,7 @@ func main() {
 	// Initialize DB
 	db, err := database.InitDB(cfg)
 	if err != nil {
-		appLogger.Error("failed to connect:", err)
+		appLogger.Error("failed to connect:", slog.Any("error", err))
 	}
 	defer db.Close()
 

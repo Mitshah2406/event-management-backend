@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -14,13 +15,12 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// DB holds database connections
 type DB struct {
 	PostgreSQL *gorm.DB
 	Redis      *redis.Client
 }
 
-// InitDB initializes the database connections
+// initializes the database connections
 func InitDB(cfg *config.Config) (*DB, error) {
 	// Initialize PostgreSQL
 	pg, err := initPostgreSQL(cfg)
@@ -29,15 +29,14 @@ func InitDB(cfg *config.Config) (*DB, error) {
 	}
 	err = Migrate(pg)
 	if err != nil {
+		log.Printf("Migration failed: %v", err)
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
 	// Initialize Redis
 	redisClient, err := initRedis(cfg)
 	if err != nil {
-		log.Printf("⚠️  Redis initialization failed: %v", err)
-		log.Println("⚠️  Continuing without Redis - seat holding will be disabled")
-		redisClient = nil // Continue without Redis for now
+		return nil, fmt.Errorf("failed to initialize Redis: %w", err)
 	}
 
 	return &DB{
@@ -46,12 +45,12 @@ func InitDB(cfg *config.Config) (*DB, error) {
 	}, nil
 }
 
-// initPostgreSQL initializes PostgreSQL connection with GORM
+// initializes PostgreSQL connection with GORM
 func initPostgreSQL(cfg *config.Config) (*gorm.DB, error) {
-	// Configure GORM logger
+	//  GORM logger
 	var gormLogger logger.Interface
 	if cfg.IsDevelopment() {
-		gormLogger = logger.Default.LogMode(logger.Silent)
+		gormLogger = logger.Default.LogMode(logger.Info)
 	} else {
 		gormLogger = logger.Default.LogMode(logger.Silent)
 	}
@@ -105,7 +104,7 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 	})
 
 	// Test the connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
@@ -117,30 +116,32 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 	return client, nil
 }
 
-// Close closes all database connections
 func (db *DB) Close() error {
-	// Close PostgreSQL
+	var errs []error
+
 	if db.PostgreSQL != nil {
 		if sqlDB, err := db.PostgreSQL.DB(); err == nil {
 			if err := sqlDB.Close(); err != nil {
-				return fmt.Errorf("failed to close PostgreSQL: %w", err)
+				errs = append(errs, fmt.Errorf("postgreSQL: %w", err))
 			}
 		}
 	}
 
-	// Close Redis
 	if db.Redis != nil {
 		if err := db.Redis.Close(); err != nil {
-			return fmt.Errorf("failed to close Redis: %w", err)
+			errs = append(errs, fmt.Errorf("redis: %w", err))
 		}
 	}
 
-	log.Println("✅ Database connections closed")
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	log.Println("Database connections closed")
 	return nil
 }
 
-// HealthCheck performs health checks on all database connections
-func (db *DB) HealthCheck(ctx context.Context) error {
+func (db *DB) HealthCheckDB(ctx context.Context) error {
 	// Check PostgreSQL
 	if db.PostgreSQL != nil {
 		sqlDB, err := db.PostgreSQL.DB()
@@ -155,7 +156,7 @@ func (db *DB) HealthCheck(ctx context.Context) error {
 	// Check Redis
 	if db.Redis != nil {
 		if err := db.Redis.Ping(ctx).Err(); err != nil {
-			return fmt.Errorf("Redis ping failed: %w", err)
+			return fmt.Errorf("redis ping failed: %w", err)
 		}
 	}
 

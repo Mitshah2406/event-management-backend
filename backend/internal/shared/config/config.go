@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Config holds all configuration for our application
+// configuration
 type Config struct {
 	// Server configuration
 	Port           string
@@ -42,7 +42,7 @@ type Config struct {
 	Email EmailConfig
 }
 
-// DatabaseConfig holds database configuration
+// database configuration
 type DatabaseConfig struct {
 	Host     string
 	Port     string
@@ -53,48 +53,48 @@ type DatabaseConfig struct {
 	DSN      string
 }
 
-// RedisConfig holds Redis configuration
+// Redis configuration
 type RedisConfig struct {
 	Host     string
 	Port     string
 	Password string
 	DB       int
 	Addr     string
-	
-	// TTL values for different operations
+
 	SeatHoldTTL time.Duration
 	SessionTTL  time.Duration
 	CacheTTL    time.Duration
 	TempDataTTL time.Duration
 }
 
-// JWTConfig holds JWT configuration
+// JWT configuration
 type JWTConfig struct {
 	Secret           string
 	JWTExpiresIn     time.Duration
 	RefreshExpiresIn time.Duration
 }
 
-// RateLimitConfig holds rate limiting configuration
+// rate limiting configuration
 type RateLimitConfig struct {
-	Enabled           bool          `json:"enabled"`
-	WindowDuration    time.Duration `json:"window_duration"`
-	DefaultRequests   int           `json:"default_requests"`
-	PublicRequests    int           `json:"public_requests"`
-	AuthRequests      int           `json:"auth_requests"`
-	BookingRequests   int           `json:"booking_requests"`
-	AdminRequests     int           `json:"admin_requests"`
-	AnalyticsRequests int           `json:"analytics_requests"`
-	WhitelistedIPs    []string      `json:"whitelisted_ips"`
+	Enabled                 bool          `json:"enabled"`
+	WindowDuration          time.Duration `json:"window_duration"`
+	DefaultRequests         int           `json:"default_requests"`
+	PublicRequests          int           `json:"public_requests"`
+	AuthRequests            int           `json:"auth_requests"`
+	BookingRequests         int           `json:"booking_requests"`
+	BookingCriticalRequests int           `json:"booking_critical_requests"` // NEW
+	AdminRequests           int           `json:"admin_requests"`
+	AnalyticsRequests       int           `json:"analytics_requests"`
+	UserRequests            int           `json:"user_requests"`   // NEW
+	HealthRequests          int           `json:"health_requests"` // NEW
+	WhitelistedIPs          []string      `json:"whitelisted_ips"`
 }
 
-// UploadConfig holds file upload configuration
 type UploadConfig struct {
 	MaxSize int64
 	Path    string
 }
 
-// AWSConfig holds AWS configuration
 type AWSConfig struct {
 	Region          string
 	AccessKeyID     string
@@ -102,7 +102,6 @@ type AWSConfig struct {
 	S3Bucket        string
 }
 
-// EmailConfig holds email configuration
 type EmailConfig struct {
 	SMTPHost     string
 	SMTPPort     int
@@ -111,7 +110,6 @@ type EmailConfig struct {
 	FromEmail    string
 }
 
-// Load loads configuration from environment variables
 func Load() *Config {
 	cfg := &Config{
 		// Server configuration
@@ -140,7 +138,7 @@ func Load() *Config {
 			Port:     getEnv("REDIS_PORT", "6379"),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getIntEnv("REDIS_DB", 0),
-			
+
 			// TTL configurations with defaults
 			SeatHoldTTL: getDurationEnv("REDIS_SEAT_HOLD_TTL", 10*time.Minute),
 			SessionTTL:  getDurationEnv("REDIS_SESSION_TTL", 24*time.Hour),
@@ -157,15 +155,18 @@ func Load() *Config {
 
 		// Rate limiting
 		RateLimit: RateLimitConfig{
-			Enabled:           getBoolEnv("RATE_LIMIT_ENABLED", true),
-			WindowDuration:    getDurationEnv("RATE_LIMIT_WINDOW_DURATION", 60*time.Second),
-			DefaultRequests:   getIntEnv("RATE_LIMIT_DEFAULT_REQUESTS", 60),
-			PublicRequests:    getIntEnv("RATE_LIMIT_PUBLIC_REQUESTS", 100),
-			AuthRequests:      getIntEnv("RATE_LIMIT_AUTH_REQUESTS", 10),
-			BookingRequests:   getIntEnv("RATE_LIMIT_BOOKING_REQUESTS", 20),
-			AdminRequests:     getIntEnv("RATE_LIMIT_ADMIN_REQUESTS", 200),
-			AnalyticsRequests: getIntEnv("RATE_LIMIT_ANALYTICS_REQUESTS", 30),
-			WhitelistedIPs:    getStringSliceEnv("RATE_LIMIT_WHITELISTED_IPS", []string{}),
+			Enabled:                 getBoolEnv("RATE_LIMIT_ENABLED", true),
+			WindowDuration:          getDurationEnv("RATE_LIMIT_WINDOW_DURATION", 60*time.Second),
+			DefaultRequests:         getIntEnv("RATE_LIMIT_DEFAULT_REQUESTS", 100),
+			PublicRequests:          getIntEnv("RATE_LIMIT_PUBLIC_REQUESTS", 300),
+			AuthRequests:            getIntEnv("RATE_LIMIT_AUTH_REQUESTS", 30),
+			BookingRequests:         getIntEnv("RATE_LIMIT_BOOKING_REQUESTS", 80),
+			BookingCriticalRequests: getIntEnv("RATE_LIMIT_BOOKING_CRITICAL_REQUESTS", 20),
+			AdminRequests:           getIntEnv("RATE_LIMIT_ADMIN_REQUESTS", 600),
+			AnalyticsRequests:       getIntEnv("RATE_LIMIT_ANALYTICS_REQUESTS", 120),
+			UserRequests:            getIntEnv("RATE_LIMIT_USER_REQUESTS", 150),
+			HealthRequests:          getIntEnv("RATE_LIMIT_HEALTH_REQUESTS", 1000),
+			WhitelistedIPs:          getStringSliceEnv("RATE_LIMIT_WHITELISTED_IPS", []string{}),
 		},
 
 		// File upload
@@ -177,7 +178,6 @@ func Load() *Config {
 		// Logging
 		LogLevel: getEnv("LOG_LEVEL", "debug"),
 
-		// AWS configuration
 		AWS: AWSConfig{
 			Region:          getEnv("AWS_REGION", ""),
 			AccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
@@ -185,7 +185,6 @@ func Load() *Config {
 			S3Bucket:        getEnv("S3_BUCKET", ""),
 		},
 
-		// Email configuration
 		Email: EmailConfig{
 			SMTPHost:     getEnv("SMTP_HOST", ""),
 			SMTPPort:     getIntEnv("SMTP_PORT", 587),
@@ -195,14 +194,13 @@ func Load() *Config {
 		},
 	}
 
-	// Build composite values
 	cfg.Database.DSN = buildDatabaseDSN(cfg.Database)
 	cfg.Redis.Addr = cfg.Redis.Host + ":" + cfg.Redis.Port
 
 	return cfg
 }
 
-// buildDatabaseDSN builds the database connection string
+// builds the database connection string
 func buildDatabaseDSN(db DatabaseConfig) string {
 	return "host=" + db.Host +
 		" port=" + db.Port +
@@ -212,7 +210,7 @@ func buildDatabaseDSN(db DatabaseConfig) string {
 		" sslmode=" + db.SSLMode
 }
 
-// getEnv gets an environment variable with a fallback value
+// gets an environment variable with a fallback value
 func getEnv(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -220,7 +218,7 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// getIntEnv gets an integer environment variable with a fallback value
+// gets an integer environment variable with a fallback value
 func getIntEnv(key string, fallback int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
@@ -230,7 +228,7 @@ func getIntEnv(key string, fallback int) int {
 	return fallback
 }
 
-// getInt64Env gets an int64 environment variable with a fallback value
+// gets an int64 environment variable with a fallback value
 func getInt64Env(key string, fallback int64) int64 {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.ParseInt(value, 10, 64); err == nil {
@@ -240,7 +238,7 @@ func getInt64Env(key string, fallback int64) int64 {
 	return fallback
 }
 
-// getDurationEnv gets a duration environment variable with a fallback value
+// gets a duration environment variable with a fallback value
 func getDurationEnv(key string, fallback time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if duration, err := time.ParseDuration(value); err == nil {
@@ -250,7 +248,7 @@ func getDurationEnv(key string, fallback time.Duration) time.Duration {
 	return fallback
 }
 
-// getDurationEnvSeconds gets an environment variable as seconds (int) and converts to time.Duration
+// gets an environment variable as seconds (int) and converts to time.Duration
 func getDurationEnvSeconds(key string, fallback time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if seconds, err := strconv.Atoi(value); err == nil {
@@ -260,7 +258,7 @@ func getDurationEnvSeconds(key string, fallback time.Duration) time.Duration {
 	return fallback
 }
 
-// getBoolEnv gets a boolean environment variable with a fallback value
+// gets a boolean environment variable with a fallback value
 func getBoolEnv(key string, fallback bool) bool {
 	if value := os.Getenv(key); value != "" {
 		if boolValue, err := strconv.ParseBool(value); err == nil {
@@ -270,7 +268,7 @@ func getBoolEnv(key string, fallback bool) bool {
 	return fallback
 }
 
-// getStringSliceEnv gets a comma-separated string environment variable as a slice
+// gets a comma-separated string environment variable as a slice
 func getStringSliceEnv(key string, fallback []string) []string {
 	if value := os.Getenv(key); value != "" {
 		parts := strings.Split(value, ",")
@@ -287,22 +285,18 @@ func getStringSliceEnv(key string, fallback []string) []string {
 	return fallback
 }
 
-// IsProduction returns true if the application is running in production mode
 func (c *Config) IsProduction() bool {
 	return c.GinMode == "release"
 }
 
-// IsDevelopment returns true if the application is running in development mode
 func (c *Config) IsDevelopment() bool {
 	return c.GinMode == "debug"
 }
 
-// GetServerAddress returns the full server address
 func (c *Config) GetServerAddress() string {
 	return ":" + c.Port
 }
 
-// GetAPIBasePath returns the API base path
 func (c *Config) GetAPIBasePath() string {
 	return c.APIPrefix + "/" + c.APIVersion
 }
