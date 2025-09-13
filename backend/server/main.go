@@ -7,8 +7,9 @@ import (
 	"evently/internal/shared/config"
 	"evently/internal/shared/database"
 	"evently/pkg/cache"
+	"evently/pkg/logger"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,13 +25,13 @@ var (
 	Version   = "dev"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
-	startTime = time.Now()
 )
 
 func main() {
 	// Load environment variables
+	appLogger := logger.GetDefault()
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
+		appLogger.Info("No .env file found, using system environment variables")
 	}
 
 	// Load config
@@ -39,23 +40,10 @@ func main() {
 	// Set Gin mode (debug/release)
 	gin.SetMode(cfg.GinMode)
 
-	// Initialize Redis Cache
-	if err := initializeRedis(cfg); err != nil {
-		log.Printf("Warning: Redis initialization failed: %v", err)
-		log.Println("Continuing without Redis cache...")
-	} else {
-		log.Println("✅ Redis cache initialized successfully")
-		defer func() {
-			if err := cache.Close(); err != nil {
-				log.Printf("Error closing Redis connection: %v", err)
-			}
-		}()
-	}
-
 	// Initialize DB
 	db, err := database.InitDB(cfg)
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		appLogger.Error("Failed to connect to database:", err)
 	}
 	defer db.Close()
 
@@ -66,23 +54,23 @@ func main() {
 	// Create unified notification service
 	notificationService, err := notifications.NewUnifiedNotificationService(nil) // Uses env config by default
 	if err != nil {
-		log.Printf("⚠️  Failed to initialize notification service: %v", err)
-		log.Println("⚠️  Continuing without notification service - notifications will not be processed")
+		appLogger.Error("Failed to initialize notification service: %v", err)
+		appLogger.Info("Continuing without notification service - notifications will not be processed")
 	} else {
 		// Start the unified notification service
 		go func() {
 			if err := notificationService.Start(notificationCtx); err != nil {
-				log.Printf("❌ Failed to start notification service: %v", err)
+				appLogger.Error(" Failed to start notification service: %v", err)
 			}
 		}()
 
-		log.Println("✅ Unified notification service initialized and started")
+		appLogger.Info("Unified notification service initialized and started")
 
 		// Ensure notification service is stopped on shutdown
 		defer func() {
-			log.Println("Stopping notification service...")
+			appLogger.Info("Stopping notification service...")
 			if err := notificationService.Stop(); err != nil {
-				log.Printf("Error stopping notification service: %v", err)
+				appLogger.Error("Error stopping notification service: %v", err)
 			}
 		}()
 	}
@@ -98,13 +86,15 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		fmt.Printf("🚀 Server running at http://localhost:%s\n", cfg.Port)
-		fmt.Printf("📊 Health Check: http://localhost:%s/health\n", cfg.Port)
-		fmt.Printf("📋 API Status: http://localhost:%s%s/status\n", cfg.Port, cfg.GetAPIBasePath())
-		fmt.Printf("🔍 API Version: %s\n", cfg.APIVersion)
-		fmt.Printf("🗄️  Redis Cache: %v\n", cache.IsInitialized())
+		appLogger.Info("🚀 Server running",
+			slog.String("address", cfg.GetServerAddress()),
+			slog.String("health_check", fmt.Sprintf("http://localhost:%s/health", cfg.Port)),
+			slog.String("api_status", fmt.Sprintf("http://localhost:%s%s/status", cfg.Port, cfg.GetAPIBasePath())),
+			slog.String("version", cfg.APIVersion),
+			slog.Bool("redis_cache", cache.IsInitialized()),
+		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v\n", err)
+			appLogger.Error("Server failed: %v\n", err)
 		}
 	}()
 
@@ -112,22 +102,23 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	appLogger.Info("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Forced shutdown: %v", err)
+		appLogger.Error("Forced shutdown: %v", err)
 	}
 
-	log.Println("Server exited gracefully")
+	appLogger.Info("Server exited gracefully")
 }
 
 func setupRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	engine := gin.New()
+	appLogger := logger.GetDefault()
 
 	// Built-in middleware: logs requests + recovers from panics
-	engine.Use(gin.Logger(), gin.Recovery())
+	engine.Use(RequestLoggerMiddleware(appLogger), gin.Recovery())
 
 	// CORS configuration
 	engine.Use(cors.New(cors.Config{
@@ -146,26 +137,11 @@ func setupRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	return engine
 }
 
-// initializeRedis sets up Redis cache using the application config
-func initializeRedis(cfg *config.Config) error {
-	// Convert app config to cache config
-	redisConfig := cache.RedisConfig{
-		Host:     cfg.Redis.Host,
-		Port:     cfg.Redis.Port,
-		Password: cfg.Redis.Password,
-		DB:       cfg.Redis.DB,
-		Addr:     cfg.Redis.Addr,
+func RequestLoggerMiddleware(l *logger.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		duration := time.Since(start)
+		l.LogHTTPRequest(c, duration)
 	}
-
-	// Initialize Redis
-	if err := cache.InitWithRedisConfig(redisConfig); err != nil {
-		return fmt.Errorf("failed to initialize Redis: %w", err)
-	}
-
-	// Test connection
-	if err := cache.Ping(); err != nil {
-		return fmt.Errorf("redis ping failed: %w", err)
-	}
-
-	return nil
 }
