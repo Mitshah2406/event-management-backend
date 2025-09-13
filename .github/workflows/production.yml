@@ -1,0 +1,71 @@
+name: Deploy to Hostinger VPS
+
+on:
+  push:
+    branches: [main, production]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            set -e
+            
+            # Navigate to project directory
+            cd /opt/evently
+            
+            # Pull latest changes
+            echo "🔄 Pulling latest code..."
+            git pull origin main
+            
+            # Build and restart services
+            echo "🐳 Building and restarting services..."
+            docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env.prod pull
+            docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env.prod up -d --build
+            
+            # Wait for services to be ready
+            echo "⏳ Waiting for services to start..."
+            sleep 30
+            
+            # Health check
+            echo "🏥 Performing health check..."
+            if curl -f http://localhost:9000/health >/dev/null 2>&1; then
+              echo "✅ Deployment successful! Application is healthy."
+            else
+              echo "❌ Health check failed. Check logs:"
+              docker compose -f deployments/docker/docker-compose.prod.yml logs --tail=50 app
+              exit 1
+            fi
+            
+            # Cleanup old images
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f
+            
+            echo "🎉 Deployment completed successfully!"
+          ENDSSH
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Deployment to VPS completed successfully!"
+          else
+            echo "❌ Deployment to VPS failed!"
+          fi

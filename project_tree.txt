@@ -17,12 +17,14 @@
 │   ├── deployments
 │   │   ├── docker
 │   │   │   ├── docker-compose.dev.yml
-│   │   │   ├── docker-compose.yml
-│   │   │   ├── Dockerfile
+│   │   │   ├── docker-compose.prod.yml
 │   │   │   ├── Dockerfile.dev
-│   │   │   └── init.sql
+│   │   │   ├── Dockerfile.prod
+│   │   │   ├── init.sql
+│   │   │   └── nginx.prod.conf
 │   │   └── k8s
 │   ├── docs
+│   │   ├── DEPLOYMENT_GUIDE.md
 │   │   ├── README.md
 │   │   ├── SWAGGER_SETUP_SUMMARY.md
 │   │   └── swagger.yaml
@@ -33,7 +35,7 @@
 │   ├── internal
 │   │   ├── analytics
 │   │   │   ├── controller.go
-│   │   │   ├── models.go
+│   │   │   ├── dto.go
 │   │   │   ├── repository.go
 │   │   │   ├── router.go
 │   │   │   └── service.go
@@ -77,6 +79,8 @@
 │   │   │   ├── controller.go
 │   │   │   ├── models.go
 │   │   │   ├── repository.go
+│   │   │   ├── request-dto.go
+│   │   │   ├── response-dto.go
 │   │   │   ├── router.go
 │   │   │   └── service.go
 │   │   ├── shared
@@ -129,10 +133,13 @@
 │   │   │   └── service.go
 │   │   ├── logger
 │   │   │   └── logger.go
-│   │   ├── queue
 │   │   └── ratelimit
 │   │       ├── middleware.go
 │   │       └── rate_limiter.go
+│   ├── scripts
+│   │   ├── deploy.sh
+│   │   ├── maintenance.sh
+│   │   └── server-setup.sh
 │   ├── server
 │   │   └── main.go
 │   ├── test1.go.txt
@@ -144,4 +151,4 @@
 ├── Evently-Task.txt
 └── project_tree.txt
 
-40 directories, 105 files
+40 directories, 112 files

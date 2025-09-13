@@ -1,0 +1,71 @@
+# Multi-stage production Dockerfile for Go application
+# Stage 1: Build stage
+FROM golang:1.25.1-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+# Set working directory
+WORKDIR /app
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+
+# Download dependencies (cached if go.mod/go.sum haven't changed)
+RUN go mod download && go mod verify
+
+# Copy source code
+COPY . .
+
+# Build the binary with optimizations
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags='-w -s -extldflags "-static"' \
+    -a -installsuffix cgo \
+    -o bin/server server/main.go
+
+# Verify the binary was built
+RUN ls -la bin/
+
+# Stage 2: Production stage
+FROM alpine:3.19 AS production
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata curl && \
+    update-ca-certificates
+
+# Create non-root user
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+
+# Create necessary directories
+RUN mkdir -p /app/uploads /app/logs && \
+    chown -R appuser:appgroup /app
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder stage
+COPY --from=builder --chown=appuser:appgroup /app/bin/server ./server
+
+# Copy any necessary config files (if any)
+# COPY --from=builder --chown=appuser:appgroup /app/configs ./configs
+
+# Make binary executable
+RUN chmod +x ./server
+
+# Switch to non-root user
+USER appuser
+
+# Expose port (will be mapped to 9000 in docker-compose)
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Start the application
+CMD ["./server"]
