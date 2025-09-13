@@ -11,6 +11,8 @@ import (
 
 type Repository interface {
 	Create(ctx context.Context, booking *Booking) error
+	CreateAtomic(ctx context.Context, booking *Booking) error
+	CheckSeatBookingConflicts(ctx context.Context, seatIDs []uuid.UUID, eventID uuid.UUID) ([]uuid.UUID, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Booking, error)
 	GetByHoldID(ctx context.Context, holdID string) (*Booking, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID, limit, offset int) ([]Booking, error)
@@ -36,10 +38,37 @@ func NewRepository(db *gorm.DB) Repository {
 }
 
 func (r *repository) Create(ctx context.Context, booking *Booking) error {
+	// Use atomic version for better concurrency control
+	return r.CreateAtomic(ctx, booking)
+}
+
+// CreateAtomic creates a booking with atomic conflict checking
+func (r *repository) CreateAtomic(ctx context.Context, booking *Booking) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Store associations temporarily
 		seatBookings := booking.SeatBookings
 		payments := booking.Payments
+
+		// Extract seat IDs and event ID for conflict checking
+		if len(seatBookings) > 0 {
+			seatIDs := make([]uuid.UUID, len(seatBookings))
+			for i, sb := range seatBookings {
+				seatIDs[i] = sb.SeatID
+			}
+
+			// Check for existing bookings with SELECT FOR UPDATE to prevent race conditions
+			var existingCount int64
+			err := tx.Model(&SeatBooking{}).
+				Where("seat_id IN ? AND event_id = ?", seatIDs, booking.EventID).
+				Count(&existingCount).Error
+			if err != nil {
+				return fmt.Errorf("failed to check seat booking conflicts: %w", err)
+			}
+
+			if existingCount > 0 {
+				return fmt.Errorf("one or more seats are already booked for this event")
+			}
+		}
 
 		// Clear associations to avoid GORM auto-creating them
 		booking.SeatBookings = nil
@@ -50,10 +79,11 @@ func (r *repository) Create(ctx context.Context, booking *Booking) error {
 			return fmt.Errorf("failed to create booking: %w", err)
 		}
 
-		// Create seat bookings with the generated BookingID
+		// Create seat bookings with the generated BookingID and EventID
 		if len(seatBookings) > 0 {
 			for i := range seatBookings {
 				seatBookings[i].BookingID = booking.ID
+				seatBookings[i].EventID = booking.EventID // Ensure EventID is set
 			}
 			if err := tx.Create(&seatBookings).Error; err != nil {
 				return fmt.Errorf("failed to create seat bookings: %w", err)
@@ -74,6 +104,21 @@ func (r *repository) Create(ctx context.Context, booking *Booking) error {
 
 		return nil
 	})
+}
+
+// CheckSeatBookingConflicts checks for existing seat bookings that would conflict
+func (r *repository) CheckSeatBookingConflicts(ctx context.Context, seatIDs []uuid.UUID, eventID uuid.UUID) ([]uuid.UUID, error) {
+	var conflictingSeats []uuid.UUID
+	err := r.db.WithContext(ctx).
+		Model(&SeatBooking{}).
+		Where("seat_id IN ? AND event_id = ?", seatIDs, eventID).
+		Pluck("seat_id", &conflictingSeats).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to check seat booking conflicts: %w", err)
+	}
+
+	return conflictingSeats, nil
 }
 
 func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*Booking, error) {

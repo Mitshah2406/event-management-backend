@@ -202,9 +202,24 @@ func (s *service) ConfirmBooking(ctx context.Context, userID uuid.UUID, req Book
 	}
 	booking.Payments = []Payment{*payment}
 
-	// Step 8: Process in transaction (create booking, seat bookings, and payment)
-	if err := s.repo.Create(ctx, booking); err != nil {
-		return nil, fmt.Errorf("failed to create booking: %w", err)
+	// Step 8: Extract seat IDs for final conflict check
+	seatIDs := make([]uuid.UUID, len(seats))
+	for i, seat := range seats {
+		seatIDs[i] = seat.ID
+	}
+
+	// Check for conflicts one more time before creating booking
+	conflictingSeats, err := s.repo.CheckSeatBookingConflicts(ctx, seatIDs, eventUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check seat conflicts: %w", err)
+	}
+	if len(conflictingSeats) > 0 {
+		return nil, fmt.Errorf("seats are no longer available (conflicting seats: %v)", conflictingSeats)
+	}
+
+	// Process in atomic transaction (create booking, seat bookings, and payment)
+	if err := s.repo.CreateAtomic(ctx, booking); err != nil {
+		return nil, fmt.Errorf("failed to create booking atomically: %w", err)
 	}
 
 	// Step 9: Process mock payment

@@ -4,6 +4,7 @@ import (
 	"context"
 	"evently/api/routes"
 	"evently/internal/notifications"
+	"evently/internal/seats"
 	"evently/internal/shared/config"
 	"evently/internal/shared/database"
 	"evently/pkg/logger"
@@ -55,6 +56,19 @@ func main() {
 		appLogger.Error("failed to connect:", slog.Any("error", err))
 	}
 	defer db.Close()
+
+	// Initialize Redis Lua scripts for atomic operations (critical for concurrency)
+	if db.Redis != nil {
+		atomicRedis := seats.NewAtomicRedisOperations(db.Redis)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := atomicRedis.PreloadScripts(ctx); err != nil {
+			appLogger.Error("Failed to preload Redis Lua scripts", slog.Any("error", err))
+			// Continue without failing - scripts will be loaded on first use
+		} else {
+			appLogger.Info("✅ Redis Lua scripts preloaded for atomic seat operations")
+		}
+		cancel()
+	}
 
 	// Initialize Rate Limiter
 	var rateLimiter *ratelimit.RateLimiter

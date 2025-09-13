@@ -70,6 +70,7 @@
 │   │   ├── seats
 │   │   │   ├── controller.go
 │   │   │   ├── models.go
+│   │   │   ├── redis_atomic.go
 │   │   │   ├── repository.go
 │   │   │   ├── request-dto.go
 │   │   │   ├── response-dto.go
@@ -79,6 +80,7 @@
 │   │   │   ├── config
 │   │   │   │   └── config.go
 │   │   │   ├── database
+│   │   │   │   ├── constraints.go
 │   │   │   │   ├── database.go
 │   │   │   │   └── migrate.go
 │   │   │   ├── middleware
@@ -143,4 +145,4 @@
 ├── Evently-Task.txt
 └── project_tree.txt
 
-35 directories, 109 files
+35 directories, 111 files

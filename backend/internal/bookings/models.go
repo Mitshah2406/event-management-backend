@@ -28,7 +28,8 @@ type Booking struct {
 type SeatBooking struct {
 	ID        uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
 	BookingID uuid.UUID `gorm:"type:uuid;index;not null" json:"booking_id"`
-	SeatID    uuid.UUID `gorm:"type:uuid;index;not null" json:"seat_id"`
+	EventID   uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_unique_seat_event" json:"event_id"`
+	SeatID    uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_unique_seat_event" json:"seat_id"`
 	SectionID uuid.UUID `gorm:"type:uuid;not null" json:"section_id"`
 	SeatPrice float64   `gorm:"not null" json:"seat_price"`
 	CreatedAt time.Time `json:"created_at"`
