@@ -10,6 +10,8 @@ services:
     restart: unless-stopped
     ports:
       - "9000:8080"
+    env_file:
+      - ../../.env  # Let Docker Compose handle the .env file
     environment:
       # Server Configuration
       - PORT=8080
@@ -60,7 +62,7 @@ services:
       
       # Logging
       - LOG_LEVEL=info
-      
+    
     depends_on:
       postgres:
         condition: service_healthy

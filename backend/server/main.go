@@ -6,7 +6,6 @@ import (
 	"evently/internal/notifications"
 	"evently/internal/shared/config"
 	"evently/internal/shared/database"
-	"evently/pkg/cache"
 	"evently/pkg/logger"
 	"evently/pkg/ratelimit"
 	"fmt"
@@ -31,8 +30,17 @@ var (
 func main() {
 	// Load environment variables
 	appLogger := logger.GetDefault()
+
+	// Smart environment loading
 	if err := godotenv.Load(); err != nil {
-		appLogger.Info("No .env file found, using system environment variables")
+		// Check if we're in production/container mode
+		if os.Getenv("GIN_MODE") == "release" || os.Getenv("DOCKER_CONTAINER") == "true" {
+			appLogger.Info("Production environment: using container environment variables")
+		} else {
+			appLogger.Info("No .env file found, using system environment variables")
+		}
+	} else {
+		appLogger.Info("Development environment: loaded .env file")
 	}
 
 	// Load config
@@ -124,7 +132,7 @@ func main() {
 			slog.String("health_check", fmt.Sprintf("http://localhost:%s/health", cfg.Port)),
 			slog.String("api_status", fmt.Sprintf("http://localhost:%s%s/status", cfg.Port, cfg.GetAPIBasePath())),
 			slog.String("version", cfg.APIVersion),
-			slog.Bool("redis_cache", cache.IsInitialized()),
+			slog.Bool("redis_cache", (db.Redis != nil)),
 			slog.Bool("rate_limiting", cfg.RateLimit.Enabled),
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

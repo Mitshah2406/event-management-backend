@@ -22,6 +22,7 @@ RUN go mod download && go mod verify
 COPY . .
 # Add this line after COPY . .
 COPY .env .env
+COPY docs/ ./docs/
 # Build the binary with optimizations
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags='-w -s -extldflags "-static"' \
