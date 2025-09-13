@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"evently/internal/shared/config"
-	"evently/internal/shared/constants"
+	"evently/internal/shared/utils/constants"
 	"evently/pkg/cache"
 	"evently/pkg/logger"
 

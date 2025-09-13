@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"evently/internal/shared/constants"
+	"evently/internal/shared/utils/constants"
 
 	"github.com/redis/go-redis/v9"
 )

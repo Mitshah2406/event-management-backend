@@ -23,6 +23,9 @@
 │   │   │   └── init.sql
 │   │   └── k8s
 │   ├── docs
+│   │   ├── README.md
+│   │   ├── SWAGGER_SETUP_SUMMARY.md
+│   │   └── swagger.yaml
 │   ├── emailtest.txt
 │   ├── evently_cache_test.log
 │   ├── go.mod
@@ -36,11 +39,10 @@
 │   │   │   └── service.go
 │   │   ├── auth
 │   │   │   ├── controller.go
-│   │   │   ├── dto
-│   │   │   │   ├── request.go
-│   │   │   │   └── response.go
 │   │   │   ├── models.go
 │   │   │   ├── repository.go
+│   │   │   ├── request-dto.go
+│   │   │   ├── response-dto.go
 │   │   │   ├── router.go
 │   │   │   ├── service.go
 │   │   │   └── user_service_adapter.go
@@ -70,7 +72,6 @@
 │   │   │   ├── models.go
 │   │   │   ├── producer.go
 │   │   │   ├── service.go
-│   │   │   ├── services.go
 │   │   │   └── waitlist_service_adapter.go
 │   │   ├── seats
 │   │   │   ├── controller.go
@@ -81,19 +82,20 @@
 │   │   ├── shared
 │   │   │   ├── config
 │   │   │   │   └── config.go
-│   │   │   ├── constants
-│   │   │   │   └── redis_cache.go
 │   │   │   ├── database
 │   │   │   │   ├── database.go
 │   │   │   │   └── migrate.go
 │   │   │   ├── middleware
 │   │   │   │   └── middleware.go
 │   │   │   └── utils
+│   │   │       ├── constants
+│   │   │       │   └── redis_cache.go
 │   │   │       └── response
 │   │   │           ├── helper.go
 │   │   │           └── response.model.go
 │   │   ├── tags
 │   │   │   ├── controller.go
+│   │   │   ├── helpers.go
 │   │   │   ├── models.go
 │   │   │   ├── repository.go
 │   │   │   ├── request-dto.go
@@ -105,8 +107,11 @@
 │   │   │   └── models.go
 │   │   ├── venues
 │   │   │   ├── controller.go
+│   │   │   ├── helper.go
 │   │   │   ├── models.go
 │   │   │   ├── repository.go
+│   │   │   ├── request-dto.go
+│   │   │   ├── response-dto.go
 │   │   │   ├── router.go
 │   │   │   └── service.go
 │   │   └── waitlist
@@ -139,4 +144,4 @@
 ├── Evently-Task.txt
 └── project_tree.txt
 
-41 directories, 99 files
+40 directories, 105 files

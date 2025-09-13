@@ -216,7 +216,7 @@ func (r *repository) DeleteEventPricingByEventID(ctx context.Context, eventID uu
 	return r.db.WithContext(ctx).Delete(&EventPricing{}, "event_id = ?", eventID).Error
 }
 
-// GetVenueLayoutForEvent returns the complete venue layout for an event
+// returns the complete venue layout for an event
 func (r *repository) GetVenueLayoutForEvent(ctx context.Context, eventID uuid.UUID) (*VenueLayoutResponse, error) {
 	// First get the event details
 	var event struct {
@@ -279,7 +279,7 @@ func (r *repository) GetVenueLayoutForEvent(ctx context.Context, eventID uuid.UU
 	for _, section := range sections {
 		priceMultiplier := pricingMap[section.ID]
 		if priceMultiplier == 0 {
-			priceMultiplier = 1.0 // Default if no pricing set
+			priceMultiplier = 1.0 // Default
 		}
 
 		// Get booked seat IDs for this event and section
@@ -293,7 +293,7 @@ func (r *repository) GetVenueLayoutForEvent(ctx context.Context, eventID uuid.UU
 		availableInSection := 0
 
 		for i, seat := range section.Seats {
-			isHeld := false // TODO: Check Redis for holds when needed
+			isHeld := false
 
 			// Calculate event-specific effective status
 			effectiveStatus := r.calculateEffectiveStatus(seat, bookedSeatIDs, isHeld)
@@ -336,7 +336,6 @@ func (r *repository) getBookedSeatIDs(ctx context.Context, eventID uuid.UUID, se
 		return nil, fmt.Errorf("failed to query booked seats: %w", err)
 	}
 
-	// Convert to map for efficient lookup
 	bookedMap := make(map[uuid.UUID]bool)
 	for _, seatID := range seatIDs {
 		bookedMap[seatID] = true
@@ -347,17 +346,15 @@ func (r *repository) getBookedSeatIDs(ctx context.Context, eventID uuid.UUID, se
 
 // determines the effective status of a seat for an event
 func (r *repository) calculateEffectiveStatus(seat Seat, bookedSeatIDs map[uuid.UUID]bool, isHeld bool) string {
-	// Check permanent seat status first
+
 	if seat.Status == "BLOCKED" {
 		return "BLOCKED"
 	}
 
-	// Check if held
 	if isHeld {
 		return "HELD"
 	}
 
-	// Check if booked for this event
 	if bookedSeatIDs[seat.ID] {
 		return "BOOKED"
 	}

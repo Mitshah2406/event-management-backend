@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"evently/internal/shared/constants"
+	"evently/internal/shared/utils/constants"
 	"evently/pkg/cache"
 
 	"github.com/google/uuid"

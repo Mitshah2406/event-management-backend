@@ -18,10 +18,14 @@ import (
 	"evently/pkg/cache"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	files "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 // nullNotificationAdapter is a no-op notification service for development/testing
@@ -79,6 +83,9 @@ func NewRouter(cfg *config.Config, db *database.DB) *Router {
 func (r *Router) SetupRoutes(engine *gin.Engine) {
 	// Health check and basic info endpoints
 	r.setupHealthRoutes(engine)
+
+	// Swagger documentation routes
+	r.setupSwaggerRoutes(engine)
 
 	// API routes
 	api := engine.Group(r.config.GetAPIBasePath())
@@ -575,4 +582,102 @@ func (r *Router) setupCancellationRoutesWithWrappers(rg *gin.RouterGroup) {
 			r.cancellationController.GetUserCancellations(c)
 		})
 	}
+}
+
+// setupSwaggerRoutes configures swagger documentation routes
+func (r *Router) setupSwaggerRoutes(engine *gin.Engine) {
+// Find the correct path to swagger.yaml
+swaggerPath := r.findSwaggerFile()
+if swaggerPath == "" {
+ log.Println("⚠️ swagger.yaml not found, Swagger UI will not be available")
+ return
+}
+
+log.Printf("✅ Found swagger.yaml at: %s", swaggerPath)
+
+// Serve swagger.yaml file directly
+engine.StaticFile("/swagger.yaml", swaggerPath)
+
+// Add a debug endpoint to verify swagger file accessibility
+engine.GET("/swagger-debug", func(c *gin.Context) {
+ wd, _ := os.Getwd()
+ c.JSON(http.StatusOK, gin.H{
+ "working_directory": wd,
+  "swagger_path":      swaggerPath,
+			"file_exists":       r.fileExists(swaggerPath),
+			"available_paths": []string{
+				"GET /docs - Swagger UI",
+				"GET /swagger - Alternative Swagger UI",
+				"GET /swagger.yaml - Raw YAML file",
+				"GET /swagger-debug - This debug endpoint",
+			},
+		})
+	})
+
+	// Setup Swagger UI at /docs
+	engine.GET("/docs/*any", ginSwagger.WrapHandler(files.Handler, ginSwagger.URL("/swagger.yaml")))
+
+	// Setup Swagger UI at /swagger (alternative endpoint)
+	engine.GET("/swagger/*any", ginSwagger.WrapHandler(files.Handler, ginSwagger.URL("/swagger.yaml")))
+
+	// Redirect root /docs to /docs/index.html for better UX
+	engine.GET("/docs", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/docs/index.html")
+	})
+
+	// Redirect root /swagger to /swagger/index.html for better UX
+	engine.GET("/swagger", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+	})
+
+	log.Println("📖 Swagger UI available at:")
+	log.Println("   http://localhost:8080/docs")
+	log.Println("   http://localhost:8080/swagger")
+	log.Println("   http://localhost:8080/swagger.yaml (raw file)")
+	log.Println("   http://localhost:8080/swagger-debug (debug info)")
+}
+
+// findSwaggerFile tries to locate swagger.yaml in various possible locations
+func (r *Router) findSwaggerFile() string {
+	possiblePaths := []string{
+		"./docs/swagger.yaml",           // If running from backend/
+		"../docs/swagger.yaml",          // If running from backend/server/
+		"docs/swagger.yaml",             // Alternative relative path
+		"../../docs/swagger.yaml",       // If running from backend/cmd/something/
+		"./swagger.yaml",                // If swagger.yaml is in current dir
+	}
+
+	// Try each possible path
+	for _, path := range possiblePaths {
+		if r.fileExists(path) {
+			return path
+		}
+	}
+
+	// Try to find it by searching from current working directory
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Printf("Error getting working directory: %v", err)
+		return ""
+	}
+
+	// Search in parent directories
+	currentDir := wd
+	for i := 0; i < 5; i++ { // Search up to 5 levels up
+		swaggerPath := filepath.Join(currentDir, "docs", "swagger.yaml")
+		if r.fileExists(swaggerPath) {
+			return swaggerPath
+		}
+		currentDir = filepath.Dir(currentDir)
+	}
+
+	log.Printf("❌ swagger.yaml not found. Tried paths: %v", possiblePaths)
+	log.Printf("Current working directory: %s", wd)
+	return ""
+}
+
+// fileExists checks if a file exists
+func (r *Router) fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

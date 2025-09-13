@@ -5,20 +5,16 @@ import (
 	"time"
 )
 
-// Redis Cache Configuration
-// This file centralizes all Redis cache keys and TTL values for the Evently application
-// Pattern: evently:{module}:{operation}:{identifier}:{params?}
+// CACHE TTL DURATIONS
 
-// ================== CACHE TTL DURATIONS ==================
-
-// Static Data (Long TTL: rarely changes)
+// Static Data
 const (
 	TTL_STATIC_LONG   = 24 * time.Hour // 24 hours - for very stable data
 	TTL_STATIC_MEDIUM = 12 * time.Hour // 12 hours - for architectural data
 	TTL_STATIC_SHORT  = 6 * time.Hour  // 6 hours - for user profiles
 )
 
-// Semi-Static Data (Medium TTL: changes occasionally)
+// Semi-Static Data
 const (
 	TTL_SEMI_STATIC_LONG   = 4 * time.Hour    // 4 hours - for venue layouts
 	TTL_SEMI_STATIC_MEDIUM = 2 * time.Hour    // 2 hours - for event details
@@ -26,26 +22,24 @@ const (
 	TTL_SEMI_STATIC_QUICK  = 15 * time.Minute // 15 minutes - for upcoming events
 )
 
-// Dynamic Data (Short TTL: changes frequently)
+// Dynamic Data
 const (
 	TTL_DYNAMIC_MEDIUM = 10 * time.Minute // 10 minutes - for analytics
 	TTL_DYNAMIC_SHORT  = 5 * time.Minute  // 5 minutes - for seat availability
 	TTL_DYNAMIC_QUICK  = 2 * time.Minute  // 2 minutes - for booking availability
 )
 
-// Highly Dynamic (Micro TTL: real-time sensitive)
+// Highly Dynamic
 const (
 	TTL_REALTIME_MEDIUM = 1 * time.Minute  // 1 minute - for waitlist positions
 	TTL_REALTIME_SHORT  = 30 * time.Second // 30 seconds - for live seat counts
 )
 
-// ================== REDIS KEY PREFIXES ==================
-
 const (
-	CACHE_PREFIX = "evently"
+	CACHE_PREFIX = "golang-eventify"
 )
 
-// ================== EVENTS MODULE ==================
+//  EVENTS MODULE
 
 // Event Cache Keys
 const (
@@ -69,7 +63,7 @@ const (
 	TTL_EVENT_SEARCH   = TTL_SEMI_STATIC_QUICK  // 15 minutes
 )
 
-// ================== TAGS MODULE ==================
+//  TAGS MODULE
 
 // Tag Cache Keys
 const (
@@ -87,7 +81,7 @@ const (
 	TTL_TAG_DETAIL  = TTL_STATIC_LONG  // 24 hours
 )
 
-// ================== VENUES MODULE ==================
+//  VENUES MODULE
 
 // Venue Cache Keys
 const (
@@ -112,7 +106,7 @@ const (
 	TTL_VENUE_LAYOUT    = TTL_SEMI_STATIC_LONG // 4 hours
 )
 
-// ================== SEATS MODULE ==================
+//  SEATS MODULE
 
 // Seat Cache Keys
 const (
@@ -136,7 +130,7 @@ const (
 	TTL_SEAT_AVAILABILITY = TTL_REALTIME_SHORT // 30 seconds
 )
 
-// ================== ANALYTICS MODULE ==================
+//  ANALYTICS MODULE
 
 // Analytics Cache Keys
 const (
@@ -175,7 +169,7 @@ const (
 	TTL_ANALYTICS_PERSONAL  = TTL_SEMI_STATIC_SHORT // 1 hour
 )
 
-// ================== AUTH MODULE ==================
+//  AUTH MODULE
 
 // Auth Cache Keys
 const (
@@ -189,7 +183,7 @@ const (
 	TTL_USER_ROLES   = TTL_STATIC_SHORT // 6 hours
 )
 
-// ================== BOOKINGS MODULE ==================
+//  BOOKINGS MODULE
 
 // Booking Cache Keys
 const (
@@ -204,7 +198,7 @@ const (
 	TTL_BOOKING_DETAIL = TTL_DYNAMIC_MEDIUM // 10 minutes
 )
 
-// ================== WAITLIST MODULE ==================
+//  WAITLIST MODULE
 
 // Waitlist Cache Keys
 const (
@@ -221,7 +215,7 @@ const (
 	TTL_WAITLIST_POSITION = TTL_REALTIME_MEDIUM // 1 minute
 )
 
-// ================== CANCELLATION MODULE ==================
+//  CANCELLATION MODULE
 
 // Cancellation Cache Keys
 const (
@@ -237,9 +231,7 @@ const (
 	TTL_CANCELLATION_DETAIL = TTL_DYNAMIC_MEDIUM     // 10 minutes
 )
 
-// ================== CACHE INVALIDATION PATTERNS ==================
-
-// Patterns for cache invalidation (used with Redis KEYS command or manual invalidation)
+// Patterns for cache invalidation
 const (
 	// Event-related invalidation patterns
 	PATTERN_INVALIDATE_EVENT_ALL    = CACHE_PREFIX + ":events:*"
@@ -258,10 +250,7 @@ const (
 	PATTERN_INVALIDATE_ANALYTICS = CACHE_PREFIX + ":analytics:*"
 )
 
-// ================== HELPER FUNCTIONS ==================
-
-// BuildCacheKey constructs cache keys with parameters
-// Example: BuildEventListKey(page, limit, status) -> "evently:events:list:page:1:limit:10:status:active"
+// helpers
 func BuildEventListKey(page, limit int, status string) string {
 	if status != "" {
 		return CACHE_KEY_EVENTS_LIST + ":page:" + fmt.Sprintf("%d", page) + ":limit:" + fmt.Sprintf("%d", limit) + ":status:" + status
@@ -296,39 +285,3 @@ func BuildAnalyticsEventKey(eventID string) string {
 func BuildWaitlistStatusKey(eventID, userID string) string {
 	return CACHE_KEY_WAITLIST_STATUS + eventID + ":user:" + userID
 }
-
-// ================== USAGE EXAMPLES ==================
-
-/*
-IMPLEMENTATION EXAMPLES:
-
-1. Cache Event Details:
-   key := BuildEventDetailKey(eventID)
-   ttl := TTL_EVENT_DETAIL
-
-2. Cache Active Tags:
-   key := CACHE_KEY_TAGS_ACTIVE
-   ttl := TTL_TAGS_ACTIVE
-
-3. Cache Seat Availability:
-   key := BuildSeatAvailabilityKey(sectionID, eventID)
-   ttl := TTL_SEATS_AVAILABLE
-
-4. Cache User Bookings:
-   key := BuildUserBookingsKey(userID, page)
-   ttl := TTL_USER_BOOKINGS
-
-INVALIDATION EXAMPLES:
-
-1. When event is updated:
-   - Invalidate: evently:events:*:uuid:eventID*
-   - Invalidate: evently:analytics:event:uuid:eventID
-
-2. When tag is updated:
-   - Invalidate: evently:tags:*
-   - Invalidate: evently:events:* (if events cache tags)
-
-3. When seat is booked:
-   - Invalidate: evently:seats:available:*
-   - Invalidate: evently:seats:section:*
-*/

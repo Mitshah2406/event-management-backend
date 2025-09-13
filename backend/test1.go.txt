@@ -12,7 +12,7 @@ import (
 	"evently/internal/events"
 	"evently/internal/seats"
 	"evently/internal/shared/config"
-	"evently/internal/shared/constants"
+	"evently/internal/shared/utils/constants"
 	"evently/internal/shared/database"
 	"evently/internal/tags"
 	"evently/internal/venues"

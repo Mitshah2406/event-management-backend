@@ -83,13 +83,13 @@ func main() {
 	// Create unified notification service
 	notificationService, err := notifications.NewUnifiedNotificationService(nil) // Uses env config by default
 	if err != nil {
-		appLogger.Error("Failed to initialize notification service: %v", err)
+		appLogger.Error("Failed to initialize notification service", slog.Any("error", err))
 		appLogger.Info("Continuing without notification service - notifications will not be processed")
 	} else {
 		// Start the unified notification service
 		go func() {
 			if err := notificationService.Start(notificationCtx); err != nil {
-				appLogger.Error(" Failed to start notification service: %v", err)
+				appLogger.Error("Failed to start notification service", slog.Any("error", err))
 			}
 		}()
 
@@ -99,7 +99,7 @@ func main() {
 		defer func() {
 			appLogger.Info("Stopping notification service...")
 			if err := notificationService.Stop(); err != nil {
-				appLogger.Error("Error stopping notification service: %v", err)
+				appLogger.Error("Error stopping notification service", slog.Any("error", err))
 			}
 		}()
 	}
@@ -128,7 +128,7 @@ func main() {
 			slog.Bool("rate_limiting", cfg.RateLimit.Enabled),
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			appLogger.Error("Server failed: %v\n", err)
+			appLogger.Error("Server failed", slog.Any("error", err))
 		}
 	}()
 
@@ -141,7 +141,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		appLogger.Error("Forced shutdown: %v", err)
+		appLogger.Error("Forced shutdown", slog.Any("error", err))
 	}
 
 	appLogger.Info("Server exited gracefully")
