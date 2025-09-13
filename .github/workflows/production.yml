@@ -2,7 +2,7 @@ name: Deploy to Hostinger VPS
 
 on:
   push:
-    branches: [main, production]
+    branches: [test]
   workflow_dispatch:
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
             
             echo "🚀 Starting deployment..."
             
-            # Navigate to project directory (corrected path)
+            # Navigate to project directory
             cd /var/www/event-management-backend
             
             # Pull latest changes
@@ -40,11 +40,22 @@ jobs:
             # Navigate to backend directory for docker commands
             cd backend
             
-            # Stop existing services gracefully
+            # Ensure .env file exists
+            if [ ! -f .env ]; then
+              echo "❌ .env file not found! Please create it first."
+              exit 1
+            fi
+            
+            # Show current volumes (for logging)
+            echo "📊 Current Docker volumes:"
+            docker volume ls | grep evently || echo "No evently volumes found"
+            
+            # Stop existing services gracefully (preserve volumes)
             echo "🛑 Stopping existing services..."
             docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env down --timeout 30 || true
             
-            # Remove orphaned containers
+            # Remove orphaned containers (not volumes)
+            echo "🧹 Removing orphaned containers..."
             docker container prune -f
             
             # Build and restart services
@@ -52,7 +63,7 @@ jobs:
             docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env build --no-cache
             docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env up -d
             
-            # Wait for services to be ready (increased time for Kafka)
+            # Wait for services to be ready
             echo "⏳ Waiting for services to start (60 seconds)..."
             sleep 60
             
@@ -60,10 +71,12 @@ jobs:
             echo "🔍 Checking individual services..."
             
             # Check if containers are running
-            if ! docker compose -f deployments/docker/docker-compose.prod.yml ps | grep -q "healthy\|running"; then
+            if ! docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env ps | grep -q "healthy\|running"; then
               echo "❌ Some services are not running properly"
-              docker compose -f deployments/docker/docker-compose.prod.yml ps
-              docker compose -f deployments/docker/docker-compose.prod.yml logs --tail=20
+              echo "📋 Container status:"
+              docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env ps
+              echo "📋 Container logs:"
+              docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env logs --tail=20
               exit 1
             fi
             
@@ -80,10 +93,10 @@ jobs:
               else
                 if [ $attempt -eq $max_attempts ]; then
                   echo "❌ Health check failed after $max_attempts attempts."
-                  echo "📋 Container logs:"
-                  docker compose -f deployments/docker/docker-compose.prod.yml logs --tail=30 app
+                  echo "📋 Application logs:"
+                  docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env logs --tail=30 app
                   echo "📋 Container status:"
-                  docker compose -f deployments/docker/docker-compose.prod.yml ps
+                  docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env ps
                   exit 1
                 fi
                 echo "⏳ Attempt $attempt failed, retrying in 15 seconds..."
@@ -94,7 +107,7 @@ jobs:
             
             # Reload nginx to ensure it's working with any new changes
             echo "🔄 Reloading nginx..."
-            sudo systemctl reload nginx
+            sudo systemctl reload nginx || echo "⚠️ Nginx reload failed, but continuing..."
             
             # Test HTTPS endpoints
             echo "🔒 Testing HTTPS endpoints..."
@@ -106,17 +119,28 @@ jobs:
             
             # Show final service status
             echo "📊 Final Service Status:"
-            docker compose -f deployments/docker/docker-compose.prod.yml ps
+            docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env ps
+            
+            # Show volume status (verify persistence)
+            echo "💾 Database Volumes Status:"
+            docker volume ls | grep evently
             
             # Show resource usage
             echo "💾 System Resources:"
             df -h / | head -2
             free -h | head -2
             
-            # Cleanup old images and containers
-            echo "🧹 Cleaning up old images and containers..."
+            # Cleanup old images only (preserve volumes and containers)
+            echo "🧹 Cleaning up old images..."
             docker image prune -f --filter "until=24h"
-            docker volume prune -f
+            
+            # Verify database connectivity
+            echo "🔍 Testing database connectivity..."
+            if docker compose -f deployments/docker/docker-compose.prod.yml --env-file .env exec -T postgres pg_isready -U evently_user -d evently_prod >/dev/null 2>&1; then
+              echo "✅ Database is accessible"
+            else
+              echo "⚠️ Database connectivity test failed"
+            fi
             
             echo "🎉 Deployment completed successfully!"
             echo "🌍 Application endpoints:"
@@ -124,6 +148,11 @@ jobs:
             echo "  - WWW API: https://www.evently-api.mitshah.dev"
             echo "  - Health: https://evently-api.mitshah.dev/health"
             echo "  - Direct: http://$(curl -s ifconfig.me):9000/health"
+            echo ""
+            echo "📊 Volume Status:"
+            docker volume ls | grep evently | while read line; do
+              echo "  - $line"
+            done
           ENDSSH
 
       - name: Notify deployment status
@@ -135,6 +164,8 @@ jobs:
             echo "  - Main: https://evently-api.mitshah.dev"
             echo "  - WWW: https://www.evently-api.mitshah.dev"
             echo "  - Health Check: https://evently-api.mitshah.dev/health"
+            echo ""
+            echo "💾 Database volumes have been preserved for data persistence"
           else
             echo "❌ Deployment to VPS failed!"
             echo "📋 Please check the workflow logs for details."
@@ -142,5 +173,6 @@ jobs:
             echo "  - SSH key access"
             echo "  - Server disk space"
             echo "  - Docker service status"
-            echo "  - Environment variables"
+            echo "  - Environment variables (.env file)"
+            echo "  - Database volume permissions"
           fi
