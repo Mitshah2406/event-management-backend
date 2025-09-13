@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -76,7 +77,15 @@ type JWTConfig struct {
 
 // RateLimitConfig holds rate limiting configuration
 type RateLimitConfig struct {
-	RequestsPerMinute int
+	Enabled           bool          `json:"enabled"`
+	WindowDuration    time.Duration `json:"window_duration"`
+	DefaultRequests   int           `json:"default_requests"`
+	PublicRequests    int           `json:"public_requests"`
+	AuthRequests      int           `json:"auth_requests"`
+	BookingRequests   int           `json:"booking_requests"`
+	AdminRequests     int           `json:"admin_requests"`
+	AnalyticsRequests int           `json:"analytics_requests"`
+	WhitelistedIPs    []string      `json:"whitelisted_ips"`
 }
 
 // UploadConfig holds file upload configuration
@@ -148,7 +157,15 @@ func Load() *Config {
 
 		// Rate limiting
 		RateLimit: RateLimitConfig{
-			RequestsPerMinute: getIntEnv("RATE_LIMIT_REQUESTS_PER_MINUTE", 60),
+			Enabled:           getBoolEnv("RATE_LIMIT_ENABLED", true),
+			WindowDuration:    getDurationEnv("RATE_LIMIT_WINDOW_DURATION", 60*time.Second),
+			DefaultRequests:   getIntEnv("RATE_LIMIT_DEFAULT_REQUESTS", 60),
+			PublicRequests:    getIntEnv("RATE_LIMIT_PUBLIC_REQUESTS", 100),
+			AuthRequests:      getIntEnv("RATE_LIMIT_AUTH_REQUESTS", 10),
+			BookingRequests:   getIntEnv("RATE_LIMIT_BOOKING_REQUESTS", 20),
+			AdminRequests:     getIntEnv("RATE_LIMIT_ADMIN_REQUESTS", 200),
+			AnalyticsRequests: getIntEnv("RATE_LIMIT_ANALYTICS_REQUESTS", 30),
+			WhitelistedIPs:    getStringSliceEnv("RATE_LIMIT_WHITELISTED_IPS", []string{}),
 		},
 
 		// File upload
@@ -238,6 +255,33 @@ func getDurationEnvSeconds(key string, fallback time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if seconds, err := strconv.Atoi(value); err == nil {
 			return time.Duration(seconds) * time.Second
+		}
+	}
+	return fallback
+}
+
+// getBoolEnv gets a boolean environment variable with a fallback value
+func getBoolEnv(key string, fallback bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
+		}
+	}
+	return fallback
+}
+
+// getStringSliceEnv gets a comma-separated string environment variable as a slice
+func getStringSliceEnv(key string, fallback []string) []string {
+	if value := os.Getenv(key); value != "" {
+		parts := strings.Split(value, ",")
+		var result []string
+		for _, part := range parts {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		if len(result) > 0 {
+			return result
 		}
 	}
 	return fallback

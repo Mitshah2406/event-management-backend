@@ -8,6 +8,7 @@ import (
 	"evently/internal/shared/database"
 	"evently/pkg/cache"
 	"evently/pkg/logger"
+	"evently/pkg/ratelimit"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -43,9 +44,34 @@ func main() {
 	// Initialize DB
 	db, err := database.InitDB(cfg)
 	if err != nil {
-		appLogger.Error("Failed to connect to database:", err)
+		appLogger.Error("failed to connect:", err)
 	}
 	defer db.Close()
+
+	// Initialize Rate Limiter
+	var rateLimiter *ratelimit.RateLimiter
+	if cfg.RateLimit.Enabled {
+		rateLimiterConfig := &ratelimit.Config{
+			Enabled:           cfg.RateLimit.Enabled,
+			WindowDuration:    cfg.RateLimit.WindowDuration,
+			DefaultRequests:   cfg.RateLimit.DefaultRequests,
+			PublicRequests:    cfg.RateLimit.PublicRequests,
+			AuthRequests:      cfg.RateLimit.AuthRequests,
+			BookingRequests:   cfg.RateLimit.BookingRequests,
+			AdminRequests:     cfg.RateLimit.AdminRequests,
+			AnalyticsRequests: cfg.RateLimit.AnalyticsRequests,
+			WhitelistedIPs:    cfg.RateLimit.WhitelistedIPs,
+		}
+
+		rateLimiter = ratelimit.NewRateLimiter(db.GetRedis(), rateLimiterConfig)
+		appLogger.Info("Rate limiter initialized",
+			slog.Bool("enabled", cfg.RateLimit.Enabled),
+			slog.Duration("window", cfg.RateLimit.WindowDuration),
+			slog.Int("default_requests", cfg.RateLimit.DefaultRequests),
+		)
+	} else {
+		appLogger.Info("Rate limiting disabled")
+	}
 
 	// Initialize Unified Notification Service
 	notificationCtx, notificationCancel := context.WithCancel(context.Background())
@@ -75,13 +101,17 @@ func main() {
 		}()
 	}
 
-	// Setup router
-	router := setupRouter(cfg, db)
+	// Setup router with rate limiter
+	router := setupRouter(cfg, db, rateLimiter)
 
 	// HTTP server
 	srv := &http.Server{
-		Addr:    cfg.GetServerAddress(),
-		Handler: router,
+		Addr:           cfg.GetServerAddress(),
+		Handler:        router,
+		ReadTimeout:    cfg.ReadTimeout,
+		WriteTimeout:   cfg.WriteTimeout,
+		IdleTimeout:    cfg.IdleTimeout,
+		MaxHeaderBytes: cfg.MaxHeaderBytes,
 	}
 
 	// Start server in goroutine
@@ -92,6 +122,7 @@ func main() {
 			slog.String("api_status", fmt.Sprintf("http://localhost:%s%s/status", cfg.Port, cfg.GetAPIBasePath())),
 			slog.String("version", cfg.APIVersion),
 			slog.Bool("redis_cache", cache.IsInitialized()),
+			slog.Bool("rate_limiting", cfg.RateLimit.Enabled),
 		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			appLogger.Error("Server failed: %v\n", err)
@@ -113,7 +144,7 @@ func main() {
 	appLogger.Info("Server exited gracefully")
 }
 
-func setupRouter(cfg *config.Config, db *database.DB) *gin.Engine {
+func setupRouter(cfg *config.Config, db *database.DB, rateLimiter *ratelimit.RateLimiter) *gin.Engine {
 	engine := gin.New()
 	appLogger := logger.GetDefault()
 
@@ -124,11 +155,17 @@ func setupRouter(cfg *config.Config, db *database.DB) *gin.Engine {
 	engine.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"}, // Configure based on your needs
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization", "X-RateLimit-*"},
+		ExposeHeaders:    []string{"Content-Length", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	// Global rate limiting middleware (applied to all routes)
+	if rateLimiter != nil {
+		engine.Use(ratelimit.Middleware(rateLimiter))
+		appLogger.Info("Rate limiting middleware applied to all routes")
+	}
 
 	// Initialize and setup routes
 	appRouter := routes.NewRouter(cfg, db)
