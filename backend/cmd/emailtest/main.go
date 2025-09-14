@@ -60,12 +60,6 @@ func main() {
 		WithType(notifications.NotificationTypeBookingConfirmed).
 		WithRecipient(uuid.New(), "mitshah2406@gmail.com", "Test User").
 		WithSubject("Test Email - Booking Confirmation").
-		WithTemplate("", map[string]interface{}{
-			"event_title":    "Test Event",
-			"booking_number": "BK-123456",
-			"quantity":       2,
-			"total_amount":   99.99,
-		}).
 		Build()
 
 	// Send the notification

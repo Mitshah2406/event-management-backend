@@ -1,11 +1,9 @@
 package notifications
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
-	"html/template"
 	"log"
 	"net/smtp"
 	"os"
@@ -14,9 +12,8 @@ import (
 )
 
 type EmailService interface {
-	SendNotification(ctx context.Context, notification *UnifiedNotification) error
+	SendNotification(ctx context.Context, notification *EmailNotification) error
 	SendHTML(ctx context.Context, to, subject, htmlBody, textBody string) error
-	SendTemplate(ctx context.Context, to, subject, templateName string, data interface{}) error
 }
 
 type SMTPConfig struct {
@@ -54,52 +51,43 @@ func NewSMTPConfigFromEnv() *SMTPConfig {
 }
 
 type SMTPEmailService struct {
-	config    *SMTPConfig
-	templates map[string]*template.Template
+	config *SMTPConfig
 }
 
 func NewSMTPEmailService(config *SMTPConfig) *SMTPEmailService {
 	if err := validateSMTPConfig(config); err != nil {
-		log.Fatalf("Invalid SMTP configuration: %v", err)
+		log.Printf("Invalid SMTP configuration: %v", err)
+		return nil
 	}
 
-	service := &SMTPEmailService{
-		config:    config,
-		templates: make(map[string]*template.Template),
+	return &SMTPEmailService{
+		config: config,
 	}
-
-	return service
 }
 
 func validateSMTPConfig(config *SMTPConfig) error {
 	if config == nil {
 		return fmt.Errorf("SMTP config is nil")
 	}
-
 	if config.Host == "" {
 		return fmt.Errorf("SMTP host is required")
 	}
-
 	if config.Port <= 0 || config.Port > 65535 {
 		return fmt.Errorf("SMTP port must be between 1 and 65535")
 	}
-
 	if config.Username == "" {
 		return fmt.Errorf("SMTP username is required")
 	}
-
 	if config.Password == "" {
 		return fmt.Errorf("SMTP password is required")
 	}
-
 	if config.FromEmail == "" {
-		return fmt.Errorf("From email is required")
+		return fmt.Errorf("from email is required")
 	}
-
 	return nil
 }
 
-func (s *SMTPEmailService) SendNotification(ctx context.Context, notification *UnifiedNotification) error {
+func (s *SMTPEmailService) SendNotification(ctx context.Context, notification *EmailNotification) error {
 	log.Printf("📧 [SMTP] Sending %s notification to %s (%s)",
 		notification.Type,
 		notification.RecipientEmail,
@@ -115,7 +103,6 @@ func (s *SMTPEmailService) SendNotification(ctx context.Context, notification *U
 }
 
 func (s *SMTPEmailService) SendHTML(ctx context.Context, to, subject, htmlBody, textBody string) error {
-
 	message := s.buildMessage(to, subject, htmlBody, textBody)
 
 	auth := smtp.PlainAuth("", s.config.Username, s.config.Password, s.config.Host)
@@ -136,26 +123,6 @@ func (s *SMTPEmailService) SendHTML(ctx context.Context, to, subject, htmlBody, 
 	return nil
 }
 
-func (s *SMTPEmailService) SendTemplate(ctx context.Context, to, subject, templateName string, data interface{}) error {
-	tmpl, exists := s.templates[templateName]
-	if !exists {
-		return fmt.Errorf("template %s not found", templateName)
-	}
-
-	var htmlBuf, textBuf bytes.Buffer
-
-	if err := tmpl.ExecuteTemplate(&htmlBuf, "html", data); err != nil {
-		return fmt.Errorf("failed to execute HTML template: %w", err)
-	}
-
-	if err := tmpl.ExecuteTemplate(&textBuf, "text", data); err != nil {
-		textBuf.WriteString("Please view this email in HTML format.")
-	}
-
-	return s.SendHTML(ctx, to, subject, htmlBuf.String(), textBuf.String())
-}
-
-// sendWithSTARTTLS sends email with STARTTLS encryption (recommended for Gmail)
 func (s *SMTPEmailService) sendWithSTARTTLS(addr string, auth smtp.Auth, to string, message []byte) error {
 	client, err := smtp.Dial(addr)
 	if err != nil {
@@ -185,6 +152,7 @@ func (s *SMTPEmailService) sendWithSTARTTLS(addr string, auth smtp.Auth, to stri
 	if err = client.Rcpt(to); err != nil {
 		return fmt.Errorf("failed to set recipient: %w", err)
 	}
+
 	w, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("failed to get data writer: %w", err)
@@ -233,42 +201,23 @@ func (s *SMTPEmailService) buildMessage(to, subject, htmlBody, textBody string) 
 	}
 
 	message += fmt.Sprintf("--%s--\r\n", boundary)
-
 	return []byte(message)
 }
 
-func (s *SMTPEmailService) generateContent(notification *UnifiedNotification) (string, string, error) {
-	// Use template if available
-	if notification.TemplateID != "" {
-		if tmpl, exists := s.templates[notification.TemplateID]; exists {
-			var htmlBuf, textBuf bytes.Buffer
-
-			if err := tmpl.ExecuteTemplate(&htmlBuf, "html", notification.TemplateData); err != nil {
-				return "", "", err
-			}
-
-			tmpl.ExecuteTemplate(&textBuf, "text", notification.TemplateData)
-
-			return htmlBuf.String(), textBuf.String(), nil
-		}
-	}
-
-	// Generate default content based on notification type
-	return s.generateDefaultContent(notification)
-}
-
-func (s *SMTPEmailService) generateDefaultContent(notification *UnifiedNotification) (string, string, error) {
+func (s *SMTPEmailService) generateContent(notification *EmailNotification) (string, string, error) {
 	data := notification.TemplateData
-	expiresAtStr, ok := data["expires_at"].(string)
-	if !ok {
-		return "", "", fmt.Errorf("expires_at is not a string")
-	}
-	formattedDate, err := time.Parse("2006-01-02T15:04:05.999999-07:00", expiresAtStr)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to parse expires_at: %w", err)
-	}
+
 	switch notification.Type {
 	case NotificationTypeWaitlistSpotAvailable:
+		expiresAtStr, ok := data["expires_at"].(string)
+		if !ok {
+			return "", "", fmt.Errorf("expires_at is not a string")
+		}
+		formattedDate, err := time.Parse("2006-01-02T15:04:05.999999-07:00", expiresAtStr)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to parse expires_at: %w", err)
+		}
+
 		htmlBody := fmt.Sprintf(`
 			<h2>🎉 Great News! A spot is available</h2>
 			<p>Hi %s,</p>
@@ -317,6 +266,28 @@ func (s *SMTPEmailService) generateDefaultContent(notification *UnifiedNotificat
 			data["booking_number"],
 			data["quantity"],
 			data["total_amount"],
+		)
+
+		return htmlBody, textBody, nil
+
+	case NotificationTypeWaitlistPositionUpdate:
+		htmlBody := fmt.Sprintf(`
+			<h2>📊 Waitlist Position Update</h2>
+			<p>Hi %s,</p>
+			<p>Your position for <strong>%s</strong> has been updated.</p>
+			<p>Current position: <strong>#%v</strong></p>
+			<p>Best regards,<br>Evently Team</p>
+		`,
+			notification.RecipientName,
+			data["event_title"],
+			data["position"],
+		)
+
+		textBody := fmt.Sprintf(
+			"Hi %s,\n\nYour position for %s has been updated.\nCurrent position: #%v\n\nBest regards,\nEvently Team",
+			notification.RecipientName,
+			data["event_title"],
+			data["position"],
 		)
 
 		return htmlBody, textBody, nil

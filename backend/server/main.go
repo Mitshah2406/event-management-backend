@@ -98,36 +98,34 @@ func main() {
 		appLogger.Info("Rate limiting disabled")
 	}
 
-	// Initialize Unified Notification Service
 	notificationCtx, notificationCancel := context.WithCancel(context.Background())
 	defer notificationCancel()
 
-	// Create unified notification service
-	notificationService, err := notifications.NewUnifiedNotificationService(nil) // Uses env config by default
+	// Create email notification service (no more global singleton)
+	notificationService, err := notifications.NewEmailNotificationService(nil) // Uses env config by default
 	if err != nil {
-		appLogger.Error("Failed to initialize notification service", slog.Any("error", err))
+		appLogger.Error("Failed to initialize email notification service", slog.Any("error", err))
 		appLogger.Info("Continuing without notification service - notifications will not be processed")
 	} else {
-		// Start the unified notification service
+		// Start the email notification service
 		go func() {
 			if err := notificationService.Start(notificationCtx); err != nil {
-				appLogger.Error("Failed to start notification service", slog.Any("error", err))
+				appLogger.Error("Failed to start email notification service", slog.Any("error", err))
 			}
 		}()
 
-		appLogger.Info("Unified notification service initialized and started")
+		appLogger.Info("Email notification service initialized and started")
 
 		// Ensure notification service is stopped on shutdown
 		defer func() {
-			appLogger.Info("Stopping notification service...")
+			appLogger.Info("Stopping email notification service...")
 			if err := notificationService.Stop(); err != nil {
-				appLogger.Error("Error stopping notification service", slog.Any("error", err))
+				appLogger.Error("Error stopping email notification service", slog.Any("error", err))
 			}
 		}()
 	}
-
 	// Setup router with rate limiter
-	router := setupRouter(cfg, db, rateLimiter)
+	router := setupRouter(cfg, db, rateLimiter, notificationService)
 
 	// HTTP server
 	srv := &http.Server{
@@ -169,7 +167,7 @@ func main() {
 	appLogger.Info("Server exited gracefully")
 }
 
-func setupRouter(cfg *config.Config, db *database.DB, rateLimiter *ratelimit.RateLimiter) *gin.Engine {
+func setupRouter(cfg *config.Config, db *database.DB, rateLimiter *ratelimit.RateLimiter, notificationService notifications.NotificationService) *gin.Engine {
 	engine := gin.New()
 	appLogger := logger.GetDefault()
 
@@ -194,8 +192,7 @@ func setupRouter(cfg *config.Config, db *database.DB, rateLimiter *ratelimit.Rat
 		appLogger.Info("Rate limiting middleware applied to all routes")
 	}
 
-	// Initialize and setup routes
-	appRouter := routes.NewRouter(cfg, db)
+	appRouter := routes.NewRouter(cfg, db, notificationService)
 	appRouter.SetupRoutes(engine)
 
 	return engine

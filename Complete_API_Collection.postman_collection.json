@@ -1,0 +1,2572 @@
+{
+	"info": {
+		"_postman_id": "71746cc3-ebfa-46b8-a9fe-7d81832259b9",
+		"name": "Complete API Collection",
+		"description": "Complete API collection for the Evently backend with all endpoints organized by functionality and access level.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "48293703",
+		"_collection_link": "https://mitshah2406-work-7908494.postman.co/workspace/Mit-Shah's-Workspace~cbe50ff8-d537-489d-8299-e2b703f94c7f/collection/48293703-71746cc3-ebfa-46b8-a9fe-7d81832259b9?action=share&source=collection_link&creator=48293703"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"first_name\": \"Dummy\",\n    \"last_name\": \"Doe\",\n    \"email\": \"dummy@gmail.com\",\n    \"password\": \"qwerty\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{DEV_BASE_URL}}/{{AUTH_PREFIX}}/register",
+							"host": [
+								"{{DEV_BASE_URL}}"
+							],
+							"path": [
+								"{{AUTH_PREFIX}}",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"mitshah2406.work@gmail.com\",\n    \"password\": \"qwerty\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{DEV_BASE_URL}}/{{AUTH_PREFIX}}/login",
+							"host": [
+								"{{DEV_BASE_URL}}"
+							],
+							"path": [
+								"{{AUTH_PREFIX}}",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{USER_TOKEN}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{DEV_BASE_URL}}/{{AUTH_PREFIX}}/me",
+							"host": [
+								"{{DEV_BASE_URL}}"
+							],
+							"path": [
+								"{{AUTH_PREFIX}}",
+								"me"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{USER_TOKEN}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"current_password\": \"oldPassword\",\n    \"new_password\": \"newSecurePassword123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{DEV_BASE_URL}}/{{AUTH_PREFIX}}/change-password",
+							"host": [
+								"{{DEV_BASE_URL}}"
+							],
+							"path": [
+								"{{AUTH_PREFIX}}",
+								"change-password"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Analytics",
+			"item": [
+				{
+					"name": "Admin Analytics",
+					"item": [
+						{
+							"name": "Dashboard & Overview",
+							"item": [
+								{
+									"name": "Get Dashboard Analytics",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/dashboard",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"dashboard"
+											]
+										},
+										"description": "Get comprehensive dashboard metrics across all domains (events, bookings, users, etc.)"
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Event Analytics",
+							"item": [
+								{
+									"name": "Get Global Event Analytics",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/events",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"events"
+											]
+										},
+										"description": "Get analytics across all events - performance metrics, trends, etc."
+									},
+									"response": []
+								},
+								{
+									"name": "Get Event Analytics by ID",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/events/:event_id",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"events",
+												":event_id"
+											],
+											"variable": [
+												{
+													"key": "event_id",
+													"value": "{{EVENT_ID}}",
+													"description": "Specific event UUID"
+												}
+											]
+										},
+										"description": "Get detailed analytics for a specific event - bookings, revenue, seat utilization, etc."
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Tag Analytics",
+							"item": [
+								{
+									"name": "Get Tag Analytics Overview",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/tags",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"tags"
+											]
+										},
+										"description": "Overall tag analytics - usage statistics, performance metrics"
+									},
+									"response": []
+								},
+								{
+									"name": "Get Tag Popularity Analytics",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/tags/popularity",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"tags",
+												"popularity"
+											]
+										},
+										"description": "Tag popularity metrics - most used tags, booking correlations"
+									},
+									"response": []
+								},
+								{
+									"name": "Get Tag Trends",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/tags/trends?months=6",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"tags",
+												"trends"
+											],
+											"query": [
+												{
+													"key": "months",
+													"value": "6",
+													"description": "Number of months to analyze (default: 6)"
+												}
+											]
+										},
+										"description": "Tag trends over time - seasonal patterns, growth trends"
+									},
+									"response": []
+								},
+								{
+									"name": "Get Tag Comparisons",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/tags/comparisons",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"tags",
+												"comparisons"
+											]
+										},
+										"description": "Compare tag performance - revenue, bookings, user engagement"
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Booking Analytics",
+							"item": [
+								{
+									"name": "Get Booking Analytics Overview",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/bookings",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"bookings"
+											]
+										},
+										"description": "Overall booking analytics - total bookings, revenue, conversion rates"
+									},
+									"response": []
+								},
+								{
+									"name": "Get Daily Booking Statistics",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/bookings/daily",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"bookings",
+												"daily"
+											]
+										},
+										"description": "Daily booking statistics - daily trends, peak booking times"
+									},
+									"response": []
+								},
+								{
+									"name": "Get Cancellation Analytics",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/bookings/cancellations",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"bookings",
+												"cancellations"
+											]
+										},
+										"description": "Cancellation rates and analysis - patterns, reasons, impact"
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "User Analytics",
+							"item": [
+								{
+									"name": "Get User Analytics Overview",
+									"request": {
+										"auth": {
+											"type": "bearer",
+											"bearer": [
+												{
+													"key": "token",
+													"value": "{{ADMIN_TOKEN}}",
+													"type": "string"
+												}
+											]
+										},
+										"method": "GET",
+										"header": [],
+										"url": {
+											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/users",
+											"host": [
+												"{{DEV_ADMIN_URL}}"
+											],
+											"path": [
+												"{{ANALYTICS_PREFIX}}",
+												"users"
+											]
+										},
+										"description": "User behavior analytics - registration trends, activity patterns"
+									},
+									"response": []
+								}
+							]
+						}
+					],
+					"description": "Admin-only analytics endpoints requiring admin authentication"
+				},
+				{
+					"name": "User Analytics",
+					"item": [
+						{
+							"name": "Get Personal Analytics",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/user/{{ANALYTICS_PREFIX}}/personal",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"user",
+										"{{ANALYTICS_PREFIX}}",
+										"personal"
+									]
+								},
+								"description": "Personal analytics for the authenticated user - spending patterns, preferences"
+							},
+							"response": []
+						},
+						{
+							"name": "Get User Booking History Analytics",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/user/{{ANALYTICS_PREFIX}}/bookings/history",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"user",
+										"{{ANALYTICS_PREFIX}}",
+										"bookings",
+										"history"
+									]
+								},
+								"description": "User's booking history with analytics insights - patterns, recommendations"
+							},
+							"response": []
+						}
+					],
+					"description": "User-facing analytics endpoints for personal insights"
+				}
+			],
+			"description": "Complete analytics endpoints organized by access level and domain"
+		},
+		{
+			"name": "Events",
+			"item": [
+				{
+					"name": "Public APIs",
+					"item": [
+						{
+							"name": "Get All Events",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{EVENTS_PREFIX}}",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{EVENTS_PREFIX}}"
+									]
+								},
+								"description": "Get all public events with pagination and filtering options"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Upcoming Events",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{EVENTS_PREFIX}}/upcoming",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{EVENTS_PREFIX}}",
+										"upcoming"
+									]
+								},
+								"description": "Get all upcoming events"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Event by ID",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{EVENTS_PREFIX}}/103c61a8-2a67-4b4d-8bb0-2bae531db912",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{EVENTS_PREFIX}}",
+										"103c61a8-2a67-4b4d-8bb0-2bae531db912"
+									]
+								},
+								"description": "Get detailed information about a specific event"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Admin APIs",
+					"item": [
+						{
+							"name": "Create Event",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Rock Concert 2024\",\n    \"description\": \"Amazing rock concert featuring top artists\",\n    \"venue\": \"Madison Square Garden\",\n    \"venue_template_id\": \"2550a13f-0436-4a21-9de5-7594af4d14d0\",\n    \"date_time\": \"2025-12-15T20:00:00Z\",\n    \"base_price\": 100.00,\n    \"tags\": [\"concert\", \"music\", \"rock\"],\n    \"section_pricing\": [\n        {\n            \"section_id\": \"496d0ac7-7ff1-461d-ba4b-388a8186ba5c\",\n            \"price_multiplier\": 1.0\n        },\n        {\n            \"section_id\": \"7a4e934e-ea60-44ad-95b3-812ed1f92057\",\n            \"price_multiplier\": 2.0\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{EVENTS_PREFIX}}",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{EVENTS_PREFIX}}"
+									]
+								},
+								"description": "Create a new event (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Event",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Updated Event Name\",\n    \"description\": \"Updated event description\",\n    \"tags\": [\"updated-tag\"]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{EVENTS_PREFIX}}/:event_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{EVENTS_PREFIX}}",
+										":event_id"
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}"
+										}
+									]
+								},
+								"description": "Update an existing event (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Event",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{EVENTS_PREFIX}}/:event_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{EVENTS_PREFIX}}",
+										":event_id"
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}"
+										}
+									]
+								},
+								"description": "Delete an event (admin only)"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Protected APIs",
+					"item": [
+						{
+							"name": "Get Venue Layout",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{EVENTS_PREFIX}}/:event_id/venue/layout",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{EVENTS_PREFIX}}",
+										":event_id",
+										"venue",
+										"layout"
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}"
+										}
+									]
+								},
+								"description": "Get venue layout for an event (requires authentication)"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Event Tags",
+			"item": [
+				{
+					"name": "Public APIs",
+					"item": [
+						{
+							"name": "Get Active Tags",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{TAGS_PREFIX}}/active",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{TAGS_PREFIX}}",
+										"active"
+									]
+								},
+								"description": "Get all active tags available for public use"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Tag by Slug",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{TAGS_PREFIX}}/slug/:slug",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{TAGS_PREFIX}}",
+										"slug",
+										":slug"
+									],
+									"variable": [
+										{
+											"key": "slug",
+											"value": "technology",
+											"description": "Tag slug"
+										}
+									]
+								},
+								"description": "Get tag information by slug"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Admin APIs",
+					"item": [
+						{
+							"name": "Create Tag",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Technology\",\n    \"slug\": \"technology\",\n    \"color\": \"#4ECDC4\",\n    \"description\": \"Technology related events and conferences\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{TAGS_PREFIX}}",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{TAGS_PREFIX}}"
+									]
+								},
+								"description": "Create a new event tag (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get All Tags",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{TAGS_PREFIX}}",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{TAGS_PREFIX}}"
+									]
+								},
+								"description": "Get all tags including inactive ones (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Tag by ID",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{TAGS_PREFIX}}/:tag_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{TAGS_PREFIX}}",
+										":tag_id"
+									],
+									"variable": [
+										{
+											"key": "tag_id",
+											"value": "{{TAG_ID}}"
+										}
+									]
+								},
+								"description": "Get detailed tag information by ID (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Tag",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Updated Tag Name\",\n    \"color\": \"#FF5722\",\n    \"description\": \"Updated tag description\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{TAGS_PREFIX}}/:tag_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{TAGS_PREFIX}}",
+										":tag_id"
+									],
+									"variable": [
+										{
+											"key": "tag_id",
+											"value": "{{TAG_ID}}"
+										}
+									]
+								},
+								"description": "Update an existing tag (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Tag",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{TAGS_PREFIX}}/:tag_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{TAGS_PREFIX}}",
+										":tag_id"
+									],
+									"variable": [
+										{
+											"key": "tag_id",
+											"value": "{{TAG_ID}}"
+										}
+									]
+								},
+								"description": "Delete a tag (admin only)"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Bookings",
+			"item": [
+				{
+					"name": "Admin APIs",
+					"item": [
+						{
+							"name": "Get All Bookings",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{BOOKING_PREFIX}}",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{BOOKING_PREFIX}}"
+									]
+								},
+								"description": "Get all bookings across all events (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Booking by ID",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{BOOKING_PREFIX}}/:booking_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{BOOKING_PREFIX}}",
+										":booking_id"
+									],
+									"variable": [
+										{
+											"key": "booking_id",
+											"value": "{{BOOKING_ID}}"
+										}
+									]
+								},
+								"description": "Get detailed booking information by ID (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Bookings for Event",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{EVENTS_PREFIX}}/:event_id/{{BOOKING_PREFIX}}",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{EVENTS_PREFIX}}",
+										":event_id",
+										"{{BOOKING_PREFIX}}"
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}"
+										}
+									]
+								},
+								"description": "Get all bookings for a specific event (admin only)"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "User APIs",
+					"item": [
+						{
+							"name": "Get My Bookings",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/users/{{BOOKING_PREFIX}}",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"users",
+										"{{BOOKING_PREFIX}}"
+									]
+								},
+								"description": "Get current user's bookings"
+							},
+							"response": []
+						},
+						{
+							"name": "Confirm Booking",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"hold_id\": \"0917caeb-e0d9-46b8-a945-e195621df54d\",\n    \"event_id\": \"103c61a8-2a67-4b4d-8bb0-2bae531db912\",\n    \"payment_method\": \"credit_card\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{BOOKING_PREFIX}}/confirm",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{BOOKING_PREFIX}}",
+										"confirm"
+									]
+								},
+								"description": "Confirm a booking with payment"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Booking Details",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{BOOKING_PREFIX}}/:booking_id",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{BOOKING_PREFIX}}",
+										":booking_id"
+									],
+									"variable": [
+										{
+											"key": "booking_id",
+											"value": "{{BOOKING_ID}}"
+										}
+									]
+								},
+								"description": "Get details of a specific booking"
+							},
+							"response": []
+						},
+						{
+							"name": "Cancel Booking",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"reason\": \"I want to cancel the ticket becuase im ill\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{BOOKING_PREFIX}}/:booking_id/request-cancel",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{BOOKING_PREFIX}}",
+										":booking_id",
+										"request-cancel"
+									],
+									"variable": [
+										{
+											"key": "booking_id",
+											"value": "{{BOOKING_ID}}"
+										}
+									]
+								},
+								"description": "Cancel a booking"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Venues",
+			"item": [
+				{
+					"name": "Venue Templates",
+					"item": [
+						{
+							"name": "Create Venue Template",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Concert Hall\",\n    \"description\": \"Medium-sized concert venue\",\n    \"default_rows\": 10,\n    \"default_seats_per_row\": 20,\n    \"layout_type\": \"THEATER\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{VENUE_TEMPLATES_PREFIX}}",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{VENUE_TEMPLATES_PREFIX}}"
+									]
+								},
+								"description": "Create a new venue template (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get All Venue Templates",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{VENUE_TEMPLATES_PREFIX}}",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{VENUE_TEMPLATES_PREFIX}}"
+									]
+								},
+								"description": "Get all venue templates (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Venue Template by ID",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{VENUE_TEMPLATES_PREFIX}}/:template_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{VENUE_TEMPLATES_PREFIX}}",
+										":template_id"
+									],
+									"variable": [
+										{
+											"key": "template_id",
+											"value": "{{TEMPLATE_ID}}"
+										}
+									]
+								},
+								"description": "Get venue template details by ID (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Venue Template",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Updated Concert Hall\",\n    \"description\": \"Updated medium-sized concert venue\",\n    \"layout_type\": \"STADIUM\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{VENUE_TEMPLATES_PREFIX}}/:template_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{VENUE_TEMPLATES_PREFIX}}",
+										":template_id"
+									],
+									"variable": [
+										{
+											"key": "template_id",
+											"value": "{{TEMPLATE_ID}}"
+										}
+									]
+								},
+								"description": "Update venue template (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Venue Template",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{VENUE_TEMPLATES_PREFIX}}/:template_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{VENUE_TEMPLATES_PREFIX}}",
+										":template_id"
+									],
+									"variable": [
+										{
+											"key": "template_id",
+											"value": "{{TEMPLATE_ID}}"
+										}
+									]
+								},
+								"description": "Delete venue template (admin only)"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Venue Sections",
+					"item": [
+						{
+							"name": "Create Section",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"template_id\": \"2550a13f-0436-4a21-9de5-7594af4d14d0\",\n    \"name\": \"VIP Section\",\n    \"description\": \"Premium seating area\",\n    \"row_start\": \"A\",\n    \"row_end\": \"F\",\n    \"seats_per_row\": 10,\n    \"total_seats\": 60\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{VENUE_TEMPLATES_PREFIX}}/:template_id/sections",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{VENUE_TEMPLATES_PREFIX}}",
+										":template_id",
+										"sections"
+									],
+									"variable": [
+										{
+											"key": "template_id",
+											"value": "{{TEMPLATE_ID}}"
+										}
+									]
+								},
+								"description": "Create a new section in a venue template (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Sections by Template ID",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{VENUE_TEMPLATES_PREFIX}}/:template_id/sections",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{VENUE_TEMPLATES_PREFIX}}",
+										":template_id",
+										"sections"
+									],
+									"variable": [
+										{
+											"key": "template_id",
+											"value": "{{TEMPLATE_ID}}"
+										}
+									]
+								},
+								"description": "Get all sections for a venue template (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Section",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Updated Section Name\",\n    \"description\": \"Updated section description\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{SECTION_PREFIX}}/:section_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{SECTION_PREFIX}}",
+										":section_id"
+									],
+									"variable": [
+										{
+											"key": "section_id",
+											"value": "{{SECTION_ID}}"
+										}
+									]
+								},
+								"description": "Update a section (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Section",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{SECTION_PREFIX}}/:section_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{SECTION_PREFIX}}",
+										":section_id"
+									],
+									"variable": [
+										{
+											"key": "section_id",
+											"value": "{{SECTION_ID}}"
+										}
+									]
+								},
+								"description": "Delete a section (admin only)"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Seats",
+			"item": [
+				{
+					"name": "Admin APIs",
+					"item": [
+						{
+							"name": "Update Seat",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"seat_number\": \"A1-UPDATED\",\n    \"is_available\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{SEAT_PREFIX}}/:seat_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{SEAT_PREFIX}}",
+										":seat_id"
+									],
+									"variable": [
+										{
+											"key": "seat_id",
+											"value": "{{SEAT_ID}}"
+										}
+									]
+								},
+								"description": "Update seat information (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Seat",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{SEAT_PREFIX}}/:seat_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{SEAT_PREFIX}}",
+										":seat_id"
+									],
+									"variable": [
+										{
+											"key": "seat_id",
+											"value": "{{SEAT_ID}}"
+										}
+									]
+								},
+								"description": "Delete a seat (admin only)"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Public APIs",
+					"item": [
+						{
+							"name": "Get Seats for Section",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{SECTION_PREFIX}}/:section_id/seats",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{SECTION_PREFIX}}",
+										":section_id",
+										"seats"
+									],
+									"variable": [
+										{
+											"key": "section_id",
+											"value": "{{SECTION_ID}}"
+										}
+									]
+								},
+								"description": "Get all seats in a specific section"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Available Seats for Event",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{SECTION_PREFIX}}/:section_id/seats/available?event_id={{EVENT_ID}}",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{SECTION_PREFIX}}",
+										":section_id",
+										"seats",
+										"available"
+									],
+									"query": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}"
+										}
+									],
+									"variable": [
+										{
+											"key": "section_id",
+											"value": "{{SECTION_ID}}"
+										}
+									]
+								},
+								"description": "Get available seats for a specific event in a section"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Protected User APIs",
+					"item": [
+						{
+							"name": "Get Seat by ID",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{SEAT_PREFIX}}/:seat_id",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{SEAT_PREFIX}}",
+										":seat_id"
+									],
+									"variable": [
+										{
+											"key": "seat_id",
+											"value": "{{SEAT_ID}}"
+										}
+									]
+								},
+								"description": "Get detailed information about a specific seat"
+							},
+							"response": []
+						},
+						{
+							"name": "Get User Holds",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/users/c8d74182-7bb8-48c2-b984-b68f626bf019/holds",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"users",
+										"c8d74182-7bb8-48c2-b984-b68f626bf019",
+										"holds"
+									]
+								},
+								"description": "Get current user's seat holds"
+							},
+							"response": []
+						},
+						{
+							"name": "Hold Seats",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"event_id\": \"103c61a8-2a67-4b4d-8bb0-2bae531db912\",\n    \"seat_ids\": [\n   \"3dcdd878-61f2-45d1-ab6b-90dde377585d\",\n    \"d4e76b64-c95c-4d03-bb3f-6f65d821004a\",\n    \"fc6236b6-3611-401f-bf7b-69f8ed58eb2b\",\n    \"3deff41d-fdcc-4fd8-9ee0-fb6bdac4a863\",\n    \"157bdedd-f64b-437f-9dd3-7dcc3aff4fda\",\n    \"66f0843e-9af6-46fc-8fb4-fdcba731ad36\",\n    \"790bbf87-f0e3-4a56-9790-06e8d225915e\"\n],\n    \"user_id\": \"f2fef2d7-94dd-4181-8801-7434e08ebd53\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{SEAT_PREFIX}}/hold",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{SEAT_PREFIX}}",
+										"hold"
+									]
+								},
+								"description": "Hold seats for booking"
+							},
+							"response": []
+						},
+						{
+							"name": "Validate Hold",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{SEAT_PREFIX}}/hold/:hold_id/validate",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{SEAT_PREFIX}}",
+										"hold",
+										":hold_id",
+										"validate"
+									],
+									"variable": [
+										{
+											"key": "hold_id",
+											"value": "{{HOLD_ID}}"
+										}
+									]
+								},
+								"description": "Validate a seat hold"
+							},
+							"response": []
+						},
+						{
+							"name": "Release Hold",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{SEAT_PREFIX}}/hold/:hold_id",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{SEAT_PREFIX}}",
+										"hold",
+										":hold_id"
+									],
+									"variable": [
+										{
+											"key": "hold_id",
+											"value": "{{HOLD_ID}}"
+										}
+									]
+								},
+								"description": "Release a seat hold"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Specific Seat Availability For Event",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"seat_ids\": [\"a39ca9ba-0b7f-40a7-994d-891c5a2ec258\"],\n    \"event_id\": \"533171b1-dfed-4b52-b631-e6673b793d4f\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{SEAT_PREFIX}}/availability",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{SEAT_PREFIX}}",
+										"availability"
+									]
+								},
+								"description": "Check availability of specific seats for an event"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Available Seats For Section Event Wise",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{SECTION_PREFIX}}/:sectionId/seats/available?event_id={{EVENT_ID}}",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{SECTION_PREFIX}}",
+										":sectionId",
+										"seats",
+										"available"
+									],
+									"query": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}"
+										}
+									],
+									"variable": [
+										{
+											"key": "sectionId",
+											"value": "6ac4cde9-dc10-4931-aa60-d4b42c947c5b",
+											"description": "section id"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Waitlist",
+			"item": [
+				{
+					"name": "User APIs",
+					"item": [
+						{
+							"name": "Join Waitlist",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"event_id\": \"{{EVENT_ID}}\",\n    \"quantity\": 7,\n    \"preferences\": {\n        \"section_preference\": \"VIP\",\n        \"notification_channels\": [\"EMAIL\", \"SMS\"]\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{WAITLIST_PREFIX}}",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{WAITLIST_PREFIX}}"
+									]
+								},
+								"description": "Join an event waitlist with specified quantity and preferences"
+							},
+							"response": []
+						},
+						{
+							"name": "Leave Waitlist",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{WAITLIST_PREFIX}}/:event_id",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{WAITLIST_PREFIX}}",
+										":event_id"
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}",
+											"description": "The ID of the event to leave waitlist for"
+										}
+									]
+								},
+								"description": "Leave an event waitlist"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Waitlist Status",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{USER_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{WAITLIST_PREFIX}}/status/:event_id",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{WAITLIST_PREFIX}}",
+										"status",
+										":event_id"
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}",
+											"description": "The ID of the event to check waitlist status for"
+										}
+									]
+								},
+								"description": "Get current user's waitlist status for a specific event"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Admin APIs",
+					"item": [
+						{
+							"name": "Get Waitlist Statistics",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{WAITLIST_PREFIX}}/stats/:event_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{WAITLIST_PREFIX}}",
+										"stats",
+										":event_id"
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}",
+											"description": "The ID of the event to get waitlist statistics for"
+										}
+									]
+								},
+								"description": "Get comprehensive waitlist statistics for an event (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Waitlist Entries",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{WAITLIST_PREFIX}}/entries/:event_id?status=ACTIVE&page=1&limit=50",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{WAITLIST_PREFIX}}",
+										"entries",
+										":event_id"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "ACTIVE",
+											"description": "Filter by waitlist status (ACTIVE, NOTIFIED, EXPIRED, CONVERTED, CANCELLED)"
+										},
+										{
+											"key": "page",
+											"value": "1",
+											"description": "Page number for pagination"
+										},
+										{
+											"key": "limit",
+											"value": "50",
+											"description": "Number of entries per page (max 100)"
+										}
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}",
+											"description": "The ID of the event to get waitlist entries for"
+										}
+									]
+								},
+								"description": "Get paginated waitlist entries for an event with optional status filtering (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Notify Next in Line",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"available_tickets\": 5\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{WAITLIST_PREFIX}}/notify/:event_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{WAITLIST_PREFIX}}",
+										"notify",
+										":event_id"
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}",
+											"description": "The ID of the event to notify waitlist users for"
+										}
+									]
+								},
+								"description": "Manually notify next users in waitlist when tickets become available (admin only)"
+							},
+							"response": []
+						},
+						{
+							"name": "Process Cancellation",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{ADMIN_TOKEN}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"freed_tickets\": 3\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{DEV_ADMIN_URL}}/{{WAITLIST_PREFIX}}/cancellation/:event_id",
+									"host": [
+										"{{DEV_ADMIN_URL}}"
+									],
+									"path": [
+										"{{WAITLIST_PREFIX}}",
+										"cancellation",
+										":event_id"
+									],
+									"variable": [
+										{
+											"key": "event_id",
+											"value": "{{EVENT_ID}}",
+											"description": "The ID of the event to process cancellation for"
+										}
+									]
+								},
+								"description": "Process event booking cancellation and notify waitlist users (admin only)"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Public APIs",
+					"item": [
+						{
+							"name": "Waitlist Health Check",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{DEV_BASE_URL}}/{{WAITLIST_PREFIX}}/health",
+									"host": [
+										"{{DEV_BASE_URL}}"
+									],
+									"path": [
+										"{{WAITLIST_PREFIX}}",
+										"health"
+									]
+								},
+								"description": "Health check endpoint for waitlist service"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "DEV_BASE_URL",
+			"value": "http://localhost:8080/api/v1",
+			"type": "string"
+		},
+		{
+			"key": "DEV_ADMIN_URL",
+			"value": "http://localhost:8080/api/v1/admin",
+			"type": "string"
+		},
+		{
+			"key": "AUTH_PREFIX",
+			"value": "auth",
+			"type": "string"
+		},
+		{
+			"key": "EVENTS_PREFIX",
+			"value": "events",
+			"type": "string"
+		},
+		{
+			"key": "TAGS_PREFIX",
+			"value": "tags",
+			"type": "string"
+		},
+		{
+			"key": "BOOKING_PREFIX",
+			"value": "bookings",
+			"type": "string"
+		},
+		{
+			"key": "VENUE_TEMPLATES_PREFIX",
+			"value": "venue-templates",
+			"type": "string"
+		},
+		{
+			"key": "SECTION_PREFIX",
+			"value": "sections",
+			"type": "string"
+		},
+		{
+			"key": "SEAT_PREFIX",
+			"value": "seats",
+			"type": "string"
+		},
+		{
+			"key": "ANALYTICS_PREFIX",
+			"value": "analytics",
+			"type": "string"
+		},
+		{
+			"key": "WAITLIST_PREFIX",
+			"value": "waitlist",
+			"type": "string"
+		},
+		{
+			"key": "ADMIN_TOKEN",
+			"value": "your_admin_token_here",
+			"type": "string"
+		},
+		{
+			"key": "USER_TOKEN",
+			"value": "your_user_token_here",
+			"type": "string"
+		},
+		{
+			"key": "EVENT_ID",
+			"value": "",
+			"type": "default"
+		}
+	]
+}

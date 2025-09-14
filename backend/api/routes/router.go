@@ -52,16 +52,18 @@ type Router struct {
 	analyticsService       analytics.Service        // For analytics
 	waitlistService        waitlist.Service         // For waitlist operations
 	cacheService           cache.Service            // For caching
+	notificationService    notifications.NotificationService
 }
 
-func NewRouter(cfg *config.Config, db *database.DB) *Router {
+func NewRouter(cfg *config.Config, db *database.DB, notificationService notifications.NotificationService) *Router {
 
 	cacheService := cache.NewService(db.GetRedis())
 
 	return &Router{
-		config:       cfg,
-		db:           db,
-		cacheService: cacheService,
+		config:              cfg,
+		db:                  db,
+		cacheService:        cacheService,
+		notificationService: notificationService,
 	}
 }
 
@@ -107,7 +109,8 @@ func (r *Router) setupHealthRoutes(engine *gin.Engine) {
 				"status":    "unhealthy",
 				"error":     err.Error(),
 				"timestamp": time.Now(),
-				"service":   "evently-backend",
+				"docs":      "/docs",
+				"service":   "event-backend",
 			})
 			return
 		}
@@ -115,7 +118,7 @@ func (r *Router) setupHealthRoutes(engine *gin.Engine) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "healthy",
 			"timestamp": time.Now(),
-			"service":   "evently-backend",
+			"service":   "event-backend",
 		})
 	})
 
@@ -440,21 +443,20 @@ func (r *Router) setupWaitlistRoutes(rg *gin.RouterGroup) {
 	// Initialize waitlist dependencies
 	waitlistRepo := waitlist.NewRepository(r.db.GetPostgreSQL(), r.db.GetRedis())
 
-	unifiedNotificationService, err := notifications.NewUnifiedNotificationService(nil)
-	if err != nil {
-		log.Printf("⚠️ Failed to initialize notification service for waitlist: %v", err)
-	}
-
 	var notificationAdapter waitlist.NotificationService
-	if unifiedNotificationService != nil {
-		notificationAdapter = notifications.NewWaitlistServiceAdapter(unifiedNotificationService)
+	if r.notificationService != nil {
+		// Use the notification service passed from main.go
+		notificationAdapter = notifications.NewWaitlistServiceAdapter(r.notificationService)
+		log.Printf("✅ Waitlist service initialized with email notification adapter")
 	} else {
-		log.Printf("⚠️ Failed to initialize unified notification service for waitlist")
+		log.Printf("⚠️ No notification service available for waitlist - notifications will be disabled")
 	}
 
+	// Create user service adapter
 	authRepo := auth.NewRepository(r.db.GetPostgreSQL())
 	userServiceAdapter := auth.NewUserServiceAdapter(authRepo)
 
+	// Create waitlist service
 	waitlistService := waitlist.NewService(waitlistRepo, notificationAdapter, userServiceAdapter, nil)
 	waitlistController := waitlist.NewController(waitlistService)
 
@@ -480,7 +482,7 @@ func (r *Router) setupWaitlistRoutes(rg *gin.RouterGroup) {
 		r.cancellationController = cancellation.NewController(r.cancellationService)
 	}
 
-	// Setup waitlist routes using the same pattern as other modules
+	// Setup waitlist routes
 	waitlist.SetupWaitlistRoutes(rg, waitlistController)
 }
 
@@ -528,9 +530,8 @@ func (r *Router) setupCancellationRoutesWithWrappers(rg *gin.RouterGroup) {
 	}
 }
 
-// setupSwaggerRoutes configures swagger documentation routes
 func (r *Router) setupSwaggerRoutes(engine *gin.Engine) {
-	// Find the correct path to swagger.yaml
+
 	swaggerPath := r.findSwaggerFile()
 	if swaggerPath == "" {
 		log.Println("⚠️ swagger.yaml not found, Swagger UI will not be available")
@@ -539,10 +540,8 @@ func (r *Router) setupSwaggerRoutes(engine *gin.Engine) {
 
 	log.Printf("✅ Found swagger.yaml at: %s", swaggerPath)
 
-	// Serve swagger.yaml file directly
 	engine.StaticFile("/swagger.yaml", swaggerPath)
 
-	// Add a debug endpoint to verify swagger file accessibility
 	engine.GET("/swagger-debug", func(c *gin.Context) {
 		wd, _ := os.Getwd()
 		c.JSON(http.StatusOK, gin.H{
@@ -558,18 +557,14 @@ func (r *Router) setupSwaggerRoutes(engine *gin.Engine) {
 		})
 	})
 
-	// Setup Swagger UI at /docs
 	engine.GET("/docs/*any", ginSwagger.WrapHandler(files.Handler, ginSwagger.URL("/swagger.yaml")))
 
-	// Setup Swagger UI at /swagger (alternative endpoint)
 	engine.GET("/swagger/*any", ginSwagger.WrapHandler(files.Handler, ginSwagger.URL("/swagger.yaml")))
 
-	// Redirect root /docs to /docs/index.html for better UX
 	engine.GET("/docs", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/docs/index.html")
 	})
 
-	// Redirect root /swagger to /swagger/index.html for better UX
 	engine.GET("/swagger", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
 	})
