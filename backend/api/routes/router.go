@@ -107,7 +107,8 @@ func (r *Router) setupHealthRoutes(engine *gin.Engine) {
 				"status":    "unhealthy",
 				"error":     err.Error(),
 				"timestamp": time.Now(),
-				"service":   "evently-backend",
+				"docs":      "/docs",
+				"service":   "event-backend",
 			})
 			return
 		}
@@ -115,7 +116,7 @@ func (r *Router) setupHealthRoutes(engine *gin.Engine) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "healthy",
 			"timestamp": time.Now(),
-			"service":   "evently-backend",
+			"service":   "event-backend",
 		})
 	})
 
@@ -528,9 +529,8 @@ func (r *Router) setupCancellationRoutesWithWrappers(rg *gin.RouterGroup) {
 	}
 }
 
-// setupSwaggerRoutes configures swagger documentation routes
 func (r *Router) setupSwaggerRoutes(engine *gin.Engine) {
-	// Find the correct path to swagger.yaml
+
 	swaggerPath := r.findSwaggerFile()
 	if swaggerPath == "" {
 		log.Println("⚠️ swagger.yaml not found, Swagger UI will not be available")
@@ -539,10 +539,8 @@ func (r *Router) setupSwaggerRoutes(engine *gin.Engine) {
 
 	log.Printf("✅ Found swagger.yaml at: %s", swaggerPath)
 
-	// Serve swagger.yaml file directly
 	engine.StaticFile("/swagger.yaml", swaggerPath)
 
-	// Add a debug endpoint to verify swagger file accessibility
 	engine.GET("/swagger-debug", func(c *gin.Context) {
 		wd, _ := os.Getwd()
 		c.JSON(http.StatusOK, gin.H{
@@ -558,18 +556,14 @@ func (r *Router) setupSwaggerRoutes(engine *gin.Engine) {
 		})
 	})
 
-	// Setup Swagger UI at /docs
 	engine.GET("/docs/*any", ginSwagger.WrapHandler(files.Handler, ginSwagger.URL("/swagger.yaml")))
 
-	// Setup Swagger UI at /swagger (alternative endpoint)
 	engine.GET("/swagger/*any", ginSwagger.WrapHandler(files.Handler, ginSwagger.URL("/swagger.yaml")))
 
-	// Redirect root /docs to /docs/index.html for better UX
 	engine.GET("/docs", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/docs/index.html")
 	})
 
-	// Redirect root /swagger to /swagger/index.html for better UX
 	engine.GET("/swagger", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
 	})

@@ -17,7 +17,6 @@ type NotificationProducer interface {
 	HealthCheck(ctx context.Context) error
 }
 
-// KafkaProducerConfig contains configuration for the Kafka notification producer
 type KafkaProducerConfig struct {
 	Brokers             []string
 	NotificationTopic   string
@@ -30,7 +29,6 @@ type KafkaProducerConfig struct {
 	EnableTopicCreation bool
 }
 
-// DefaultKafkaProducerConfig returns a default producer configuration
 func DefaultKafkaProducerConfig() *KafkaProducerConfig {
 	return &KafkaProducerConfig{
 		Brokers:             []string{"localhost:9092"},
@@ -45,13 +43,11 @@ func DefaultKafkaProducerConfig() *KafkaProducerConfig {
 	}
 }
 
-// KafkaNotificationProducer handles publishing notifications to Kafka
 type KafkaNotificationProducer struct {
 	producer sarama.SyncProducer
 	config   *KafkaProducerConfig
 }
 
-// NewKafkaNotificationProducer creates a new Kafka notification producer
 func NewKafkaNotificationProducer(config *KafkaProducerConfig) (NotificationProducer, error) {
 	saramaConfig := sarama.NewConfig()
 
@@ -158,7 +154,6 @@ func (knp *KafkaNotificationProducer) PublishBatchNotifications(ctx context.Cont
 	return nil
 }
 
-// createHeaders creates Kafka headers for notifications
 func (knp *KafkaNotificationProducer) createHeaders(notification *UnifiedNotification) []sarama.RecordHeader {
 	headers := []sarama.RecordHeader{
 		{Key: []byte("notification_id"), Value: []byte(notification.ID.String())},
@@ -204,7 +199,6 @@ func (knp *KafkaNotificationProducer) createHeaders(notification *UnifiedNotific
 	return headers
 }
 
-// formatChannels formats notification channels for headers
 func (knp *KafkaNotificationProducer) formatChannels(channels []NotificationChannel) string {
 	if len(channels) == 0 {
 		return string(NotificationChannelEmail) // default
@@ -228,9 +222,8 @@ func (knp *KafkaNotificationProducer) Close() error {
 	return nil
 }
 
-// HealthCheck performs a health check on the Kafka producerz
 func (knp *KafkaNotificationProducer) HealthCheck(ctx context.Context) error {
-	// Create a test notification
+
 	testNotification := NewNotificationBuilder().
 		WithType(NotificationTypeWelcome).
 		WithRecipient(uuid.New(), "health-check@test.com", "Health Check").
@@ -246,7 +239,7 @@ func (knp *KafkaNotificationProducer) HealthCheck(ctx context.Context) error {
 		return fmt.Errorf("health check failed - JSON marshaling error: %w", err)
 	}
 
-	// Create test message (don't actually send to avoid noise)
+	// Create test message (don't actually send)
 	message := &sarama.ProducerMessage{
 		Topic:   knp.config.NotificationTopic,
 		Key:     sarama.StringEncoder("health-check"),
@@ -254,7 +247,6 @@ func (knp *KafkaNotificationProducer) HealthCheck(ctx context.Context) error {
 		Headers: knp.createHeaders(testNotification),
 	}
 
-	// Validate message is properly formed
 	if message.Topic == "" {
 		return fmt.Errorf("health check failed - invalid topic configuration")
 	}
@@ -263,7 +255,6 @@ func (knp *KafkaNotificationProducer) HealthCheck(ctx context.Context) error {
 		return fmt.Errorf("health check failed - headers not created properly")
 	}
 
-	// Validate producer is not nil and configuration is valid
 	if knp.producer == nil {
 		return fmt.Errorf("health check failed - producer is nil")
 	}
@@ -272,26 +263,20 @@ func (knp *KafkaNotificationProducer) HealthCheck(ctx context.Context) error {
 		return fmt.Errorf("health check failed - notification topic not configured")
 	}
 
-	// Simple connectivity test - the producer will fail if Kafka is unreachable
-	// when we try to send the first actual message
-
 	log.Printf("✅ Kafka notification producer health check passed")
 	return nil
 }
 
-// NotificationPublisher provides a high-level interface for publishing different types of notifications
 type NotificationPublisher struct {
 	producer NotificationProducer
 }
 
-// NewNotificationPublisher creates a new notification publisher
 func NewNotificationPublisher(producer NotificationProducer) *NotificationPublisher {
 	return &NotificationPublisher{
 		producer: producer,
 	}
 }
 
-// PublishWaitlistNotification publishes a waitlist-specific notification
 func (np *NotificationPublisher) PublishWaitlistNotification(ctx context.Context,
 	userID uuid.UUID, email, name string, eventID uuid.UUID, waitlistEntryID uuid.UUID,
 	notificationType NotificationType, templateData map[string]interface{}) error {
@@ -305,13 +290,11 @@ func (np *NotificationPublisher) PublishWaitlistNotification(ctx context.Context
 		WithTemplate(string(notificationType), templateData).
 		Build()
 
-	// Generate subject based on type
 	notification.Subject = np.generateSubject(notificationType, templateData)
 
 	return np.producer.PublishNotification(ctx, notification)
 }
 
-// PublishBookingNotification publishes a booking-specific notification
 func (np *NotificationPublisher) PublishBookingNotification(ctx context.Context,
 	userID uuid.UUID, email, name string, bookingID uuid.UUID, eventID uuid.UUID,
 	notificationType NotificationType, templateData map[string]interface{}) error {
@@ -325,13 +308,11 @@ func (np *NotificationPublisher) PublishBookingNotification(ctx context.Context,
 		WithTemplate(string(notificationType), templateData).
 		Build()
 
-	// Generate subject based on type
 	notification.Subject = np.generateSubject(notificationType, templateData)
 
 	return np.producer.PublishNotification(ctx, notification)
 }
 
-// PublishEventNotification publishes an event-specific notification
 func (np *NotificationPublisher) PublishEventNotification(ctx context.Context,
 	userID uuid.UUID, email, name string, eventID uuid.UUID,
 	notificationType NotificationType, templateData map[string]interface{}) error {
@@ -344,13 +325,11 @@ func (np *NotificationPublisher) PublishEventNotification(ctx context.Context,
 		WithTemplate(string(notificationType), templateData).
 		Build()
 
-	// Generate subject based on type
 	notification.Subject = np.generateSubject(notificationType, templateData)
 
 	return np.producer.PublishNotification(ctx, notification)
 }
 
-// generateSubject generates appropriate subjects for different notification types
 func (np *NotificationPublisher) generateSubject(notificationType NotificationType, data map[string]interface{}) string {
 	switch notificationType {
 	case NotificationTypeWaitlistSpotAvailable:

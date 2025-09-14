@@ -32,7 +32,6 @@ type NotificationService interface {
 	HealthCheck(ctx context.Context) error
 }
 
-// ServiceConfig holds configuration for the notification service
 type ServiceConfig struct {
 	Environment string
 
@@ -52,7 +51,6 @@ type ServiceConfig struct {
 	EnablePushChannel  bool
 }
 
-// NewServiceConfigFromEnv creates service config from environment variables
 func NewServiceConfigFromEnv() *ServiceConfig {
 	config := &ServiceConfig{
 		Environment:        getEnvString("GIN_MODE", "development"),
@@ -72,7 +70,6 @@ func NewServiceConfigFromEnv() *ServiceConfig {
 	return config
 }
 
-// UnifiedNotificationService is the main implementation of NotificationService
 type UnifiedNotificationService struct {
 	config    *ServiceConfig
 	producer  NotificationProducer
@@ -89,7 +86,6 @@ type UnifiedNotificationService struct {
 	cancel    context.CancelFunc
 }
 
-// NewUnifiedNotificationService creates a new unified notification service
 func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, error) {
 	if config == nil {
 		config = NewServiceConfigFromEnv()
@@ -147,7 +143,6 @@ func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, 
 	}, nil
 }
 
-// Start starts the notification service
 func (uns *UnifiedNotificationService) Start(ctx context.Context) error {
 	uns.mu.Lock()
 	defer uns.mu.Unlock()
@@ -158,7 +153,6 @@ func (uns *UnifiedNotificationService) Start(ctx context.Context) error {
 
 	log.Printf("🚀 Starting Unified Notification Service...")
 
-	// Register channel handlers
 	if uns.config.EnableEmailChannel {
 		emailHandler := NewEmailChannelHandler(uns.emailService)
 		if err := uns.consumer.RegisterHandler(NotificationChannelEmail, emailHandler); err != nil {
@@ -166,7 +160,6 @@ func (uns *UnifiedNotificationService) Start(ctx context.Context) error {
 		}
 	}
 
-	// Start consumers
 	err := uns.consumer.StartConsumers(uns.ctx, uns.config.NumConsumerWorkers)
 	if err != nil {
 		return fmt.Errorf("failed to start consumers: %w", err)
@@ -178,7 +171,6 @@ func (uns *UnifiedNotificationService) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the notification service
 func (uns *UnifiedNotificationService) Stop() error {
 	uns.mu.Lock()
 	defer uns.mu.Unlock()
@@ -189,15 +181,12 @@ func (uns *UnifiedNotificationService) Stop() error {
 
 	log.Printf("🛑 Stopping Unified Notification Service...")
 
-	// Cancel context
 	uns.cancel()
 
-	// Stop consumer
 	if err := uns.consumer.Stop(); err != nil {
 		log.Printf("Error stopping consumer: %v", err)
 	}
 
-	// Close producer
 	if err := uns.producer.Close(); err != nil {
 		log.Printf("Error closing producer: %v", err)
 	}
@@ -208,17 +197,14 @@ func (uns *UnifiedNotificationService) Stop() error {
 	return nil
 }
 
-// SendNotification sends a single notification
 func (uns *UnifiedNotificationService) SendNotification(ctx context.Context, notification *UnifiedNotification) error {
 	return uns.producer.PublishNotification(ctx, notification)
 }
 
-// SendBatchNotifications sends multiple notifications
 func (uns *UnifiedNotificationService) SendBatchNotifications(ctx context.Context, notifications []*UnifiedNotification) error {
 	return uns.producer.PublishBatchNotifications(ctx, notifications)
 }
 
-// SendWaitlistNotification sends a waitlist-specific notification
 func (uns *UnifiedNotificationService) SendWaitlistNotification(ctx context.Context, userID uuid.UUID, email, name string,
 	eventID, waitlistEntryID uuid.UUID, notificationType NotificationType,
 	templateData map[string]interface{}) error {
@@ -226,7 +212,6 @@ func (uns *UnifiedNotificationService) SendWaitlistNotification(ctx context.Cont
 	return uns.publisher.PublishWaitlistNotification(ctx, userID, email, name, eventID, waitlistEntryID, notificationType, templateData)
 }
 
-// SendBookingNotification sends a booking-specific notification
 func (uns *UnifiedNotificationService) SendBookingNotification(ctx context.Context, userID uuid.UUID, email, name string,
 	bookingID, eventID uuid.UUID, notificationType NotificationType,
 	templateData map[string]interface{}) error {
@@ -234,7 +219,6 @@ func (uns *UnifiedNotificationService) SendBookingNotification(ctx context.Conte
 	return uns.publisher.PublishBookingNotification(ctx, userID, email, name, bookingID, eventID, notificationType, templateData)
 }
 
-// SendEventNotification sends an event-specific notification
 func (uns *UnifiedNotificationService) SendEventNotification(ctx context.Context, userID uuid.UUID, email, name string,
 	eventID uuid.UUID, notificationType NotificationType,
 	templateData map[string]interface{}) error {
@@ -242,7 +226,6 @@ func (uns *UnifiedNotificationService) SendEventNotification(ctx context.Context
 	return uns.publisher.PublishEventNotification(ctx, userID, email, name, eventID, notificationType, templateData)
 }
 
-// HealthCheck performs a health check on the service
 func (uns *UnifiedNotificationService) HealthCheck(ctx context.Context) error {
 	uns.mu.RLock()
 	isRunning := uns.isRunning
@@ -252,12 +235,10 @@ func (uns *UnifiedNotificationService) HealthCheck(ctx context.Context) error {
 		return fmt.Errorf("notification service is not running")
 	}
 
-	// Check producer health
 	if err := uns.producer.HealthCheck(ctx); err != nil {
 		return fmt.Errorf("producer health check failed: %w", err)
 	}
 
-	// Check consumer health
 	if err := uns.consumer.HealthCheck(ctx); err != nil {
 		return fmt.Errorf("consumer health check failed: %w", err)
 	}
@@ -265,7 +246,6 @@ func (uns *UnifiedNotificationService) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-// Helper functions for environment variables
 func getEnvString(key, defaultValue string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -298,13 +278,11 @@ func getEnvBool(key string, defaultValue bool) bool {
 	return boolValue
 }
 
-// Global service instance (singleton pattern for easy access)
 var (
 	globalService NotificationService
 	globalOnce    sync.Once
 )
 
-// GetGlobalNotificationService returns the global notification service instance
 func GetGlobalNotificationService() NotificationService {
 	globalOnce.Do(func() {
 		config := NewServiceConfigFromEnv()
@@ -317,13 +295,11 @@ func GetGlobalNotificationService() NotificationService {
 	return globalService
 }
 
-// InitializeGlobalNotificationService initializes and starts the global notification service
 func InitializeGlobalNotificationService(ctx context.Context) error {
 	service := GetGlobalNotificationService()
 	return service.Start(ctx)
 }
 
-// StopGlobalNotificationService stops the global notification service
 func StopGlobalNotificationService() error {
 	if globalService != nil {
 		return globalService.Stop()

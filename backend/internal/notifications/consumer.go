@@ -23,7 +23,6 @@ type ChannelHandler interface {
 	GetChannel() NotificationChannel
 }
 
-// ConsumerConfig contains configuration for the notification consumer
 type ConsumerConfig struct {
 	Brokers              []string
 	GroupID              string
@@ -38,7 +37,6 @@ type ConsumerConfig struct {
 	RetryBackoffDuration time.Duration
 }
 
-// DefaultConsumerConfig returns a default consumer configuration
 func DefaultConsumerConfig() *ConsumerConfig {
 	return &ConsumerConfig{
 		Brokers:              []string{"localhost:9092"},
@@ -55,7 +53,6 @@ func DefaultConsumerConfig() *ConsumerConfig {
 	}
 }
 
-// KafkaNotificationConsumer handles consuming notifications from Kafka
 type KafkaNotificationConsumer struct {
 	consumerGroup sarama.ConsumerGroup
 	config        *ConsumerConfig
@@ -68,7 +65,6 @@ type KafkaNotificationConsumer struct {
 	cancel        context.CancelFunc
 }
 
-// NewKafkaNotificationConsumer creates a new Kafka notification consumer
 func NewKafkaNotificationConsumer(config *ConsumerConfig) (NotificationConsumer, error) {
 	saramaConfig := sarama.NewConfig()
 
@@ -155,7 +151,6 @@ func (knc *KafkaNotificationConsumer) StartConsumers(ctx context.Context, numWor
 	return nil
 }
 
-// runWorker runs a single consumer worker
 func (knc *KafkaNotificationConsumer) runWorker(ctx context.Context, workerID int) {
 	consumer := &ConsumerGroupHandler{
 		consumer:  knc,
@@ -179,7 +174,6 @@ func (knc *KafkaNotificationConsumer) runWorker(ctx context.Context, workerID in
 	}
 }
 
-// handleErrors handles consumer errors
 func (knc *KafkaNotificationConsumer) handleErrors() {
 	for err := range knc.consumerGroup.Errors() {
 		log.Printf("📥 Consumer group error: %v", err)
@@ -187,7 +181,6 @@ func (knc *KafkaNotificationConsumer) handleErrors() {
 	}
 }
 
-// Stop stops the consumer
 func (knc *KafkaNotificationConsumer) Stop() error {
 	log.Println("📥 Stopping notification consumer...")
 	knc.cancel()
@@ -201,7 +194,6 @@ func (knc *KafkaNotificationConsumer) Stop() error {
 	return nil
 }
 
-// HealthCheck performs a health check on the consumer
 func (knc *KafkaNotificationConsumer) HealthCheck(ctx context.Context) error {
 	select {
 	case <-knc.ctx.Done():
@@ -220,7 +212,6 @@ func (knc *KafkaNotificationConsumer) HealthCheck(ctx context.Context) error {
 	}
 }
 
-// ConsumerGroupHandler implements sarama.ConsumerGroupHandler
 type ConsumerGroupHandler struct {
 	consumer  *KafkaNotificationConsumer
 	workerID  int
@@ -228,7 +219,6 @@ type ConsumerGroupHandler struct {
 	readyOnce *sync.Once
 }
 
-// Setup is run at the beginning of a new session, before ConsumeClaim
 func (h *ConsumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
 	log.Printf("📥 Worker %d: Consumer group session started", h.workerID)
 	// Use sync.Once to ensure the ready channel is only closed once
@@ -238,13 +228,11 @@ func (h *ConsumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-// Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
 func (h *ConsumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
 	log.Printf("📥 Worker %d: Consumer group session ended", h.workerID)
 	return nil
 }
 
-// ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages()
 func (h *ConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for {
 		select {
@@ -268,7 +256,6 @@ func (h *ConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 	}
 }
 
-// processMessage processes a single Kafka message
 func (h *ConsumerGroupHandler) processMessage(ctx context.Context, message *sarama.ConsumerMessage) error {
 	log.Printf("📥 Worker %d: Processing notification from topic %s, partition %d, offset %d",
 		h.workerID, message.Topic, message.Partition, message.Offset)
@@ -302,7 +289,6 @@ func (h *ConsumerGroupHandler) processMessage(ctx context.Context, message *sara
 		}
 	}
 
-	// Update final status
 	if successCount > 0 {
 		if successCount == len(notification.Channels) {
 			notification.Status = NotificationStatusSent
@@ -321,7 +307,6 @@ func (h *ConsumerGroupHandler) processMessage(ctx context.Context, message *sara
 	return lastErr
 }
 
-// processChannel processes a notification for a specific channel
 func (h *ConsumerGroupHandler) processChannel(ctx context.Context, notification *UnifiedNotification, channel NotificationChannel) error {
 	h.consumer.handlersMu.RLock()
 	handler, exists := h.consumer.handlers[channel]
@@ -340,7 +325,6 @@ func (h *ConsumerGroupHandler) processChannel(ctx context.Context, notification 
 	return h.executeWithRetry(processCtx, handler, notification, channel)
 }
 
-// executeWithRetry executes a handler with retry logic
 func (h *ConsumerGroupHandler) executeWithRetry(ctx context.Context, handler ChannelHandler, notification *UnifiedNotification, channel NotificationChannel) error {
 	maxRetries := h.consumer.config.MaxRetries
 	backoff := h.consumer.config.RetryBackoffDuration
@@ -377,19 +361,16 @@ func (h *ConsumerGroupHandler) executeWithRetry(ctx context.Context, handler Cha
 	return nil
 }
 
-// EmailChannelHandler handles email notifications
 type EmailChannelHandler struct {
 	emailService EmailService
 }
 
-// NewEmailChannelHandler creates a new email channel handler
 func NewEmailChannelHandler(emailService EmailService) ChannelHandler {
 	return &EmailChannelHandler{
 		emailService: emailService,
 	}
 }
 
-// Handle processes email notifications
 func (e *EmailChannelHandler) Handle(ctx context.Context, notification *UnifiedNotification) error {
 	log.Printf("📧 Processing email notification for %s (ID: %s)", notification.RecipientEmail, notification.ID)
 
@@ -402,7 +383,6 @@ func (e *EmailChannelHandler) Handle(ctx context.Context, notification *UnifiedN
 	return nil
 }
 
-// GetChannel returns the channel this handler processes
 func (e *EmailChannelHandler) GetChannel() NotificationChannel {
 	return NotificationChannelEmail
 }
