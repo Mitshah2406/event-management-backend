@@ -7,18 +7,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// Simplified notification types - only the ones actually used
 type NotificationType string
 
 const (
 	NotificationTypeWaitlistSpotAvailable  NotificationType = "WAITLIST_SPOT_AVAILABLE"
+	NotificationTypeBookingConfirmed       NotificationType = "BOOKING_CONFIRMED"
 	NotificationTypeWaitlistPositionUpdate NotificationType = "WAITLIST_POSITION_UPDATE"
-	NotificationTypeWaitlistReminder       NotificationType = "WAITLIST_REMINDER"
-	NotificationTypeWaitlistExpired        NotificationType = "WAITLIST_EXPIRED"
-
-	NotificationTypeBookingConfirmed NotificationType = "BOOKING_CONFIRMED"
-	NotificationTypeWelcome          NotificationType = "WELCOME"
 )
 
+// Only email channel since that's all that's implemented
 type NotificationChannel string
 
 const (
@@ -45,107 +43,49 @@ const (
 	NotificationStatusFailed    NotificationStatus = "FAILED"
 	NotificationStatusRetrying  NotificationStatus = "RETRYING"
 	NotificationStatusExpired   NotificationStatus = "EXPIRED"
-	NotificationStatusCancelled NotificationStatus = "CANCELLED"
 )
 
-type UnifiedNotification struct {
-	ID       uuid.UUID             `json:"id"`
-	Type     NotificationType      `json:"type"`
-	Priority NotificationPriority  `json:"priority"`
-	Channels []NotificationChannel `json:"channels"`
+// Simplified notification struct - removed unused fields
+type EmailNotification struct {
+	ID       uuid.UUID            `json:"id"`
+	Type     NotificationType     `json:"type"`
+	Priority NotificationPriority `json:"priority"`
 
+	// Recipient info - removed phone since only email is supported
 	RecipientID    uuid.UUID `json:"recipient_id"`
 	RecipientEmail string    `json:"recipient_email"`
-	RecipientPhone *string   `json:"recipient_phone,omitempty"`
 	RecipientName  string    `json:"recipient_name"`
 
+	// Content
 	Subject      string                 `json:"subject"`
-	TemplateID   string                 `json:"template_id"`
 	TemplateData map[string]interface{} `json:"template_data"`
 
+	// Context - kept only the ones actually used
 	EventID         *uuid.UUID `json:"event_id,omitempty"`
 	BookingID       *uuid.UUID `json:"booking_id,omitempty"`
 	WaitlistEntryID *uuid.UUID `json:"waitlist_entry_id,omitempty"`
 
-	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
-	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
-
-	Status           NotificationStatus `json:"status"`
-	RetryCount       int                `json:"retry_count"`
-	MaxRetries       int                `json:"max_retries"`
-	LastError        *string            `json:"last_error,omitempty"`
-	DeliveryAttempts []DeliveryAttempt  `json:"delivery_attempts,omitempty"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
-	SentAt           *time.Time         `json:"sent_at,omitempty"`
-	DeliveredAt      *time.Time         `json:"delivered_at,omitempty"`
-}
-
-type DeliveryAttempt struct {
-	Channel     NotificationChannel `json:"channel"`
-	AttemptedAt time.Time           `json:"attempted_at"`
-	Status      NotificationStatus  `json:"status"`
-	Error       *string             `json:"error,omitempty"`
-	MessageID   *string             `json:"message_id,omitempty"`
-}
-
-type NotificationTemplate struct {
-	ID        string              `json:"id"`
-	Type      NotificationType    `json:"type"`
-	Channel   NotificationChannel `json:"channel"`
-	Subject   string              `json:"subject"`
-	HTMLBody  string              `json:"html_body"`
-	TextBody  string              `json:"text_body"`
-	Variables []string            `json:"variables"`
-	CreatedAt time.Time           `json:"created_at"`
-	UpdatedAt time.Time           `json:"updated_at"`
-}
-
-type EventData struct {
-	ID          uuid.UUID `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
-	VenueID     uuid.UUID `json:"venue_id"`
-	VenueName   string    `json:"venue_name"`
-	Price       float64   `json:"price"`
-}
-
-type BookingData struct {
-	ID            uuid.UUID `json:"id"`
-	EventID       uuid.UUID `json:"event_id"`
-	UserID        uuid.UUID `json:"user_id"`
-	Quantity      int       `json:"quantity"`
-	TotalAmount   float64   `json:"total_amount"`
-	BookingNumber string    `json:"booking_number"`
-	Status        string    `json:"status"`
-}
-
-type UserData struct {
-	ID          uuid.UUID              `json:"id"`
-	Email       string                 `json:"email"`
-	FirstName   string                 `json:"first_name"`
-	LastName    string                 `json:"last_name"`
-	PhoneNumber *string                `json:"phone_number,omitempty"`
-	Preferences map[string]interface{} `json:"preferences,omitempty"`
-}
-
-type WaitlistData struct {
-	ID        uuid.UUID  `json:"id"`
-	Position  int        `json:"position"`
-	Quantity  int        `json:"quantity"`
-	JoinedAt  time.Time  `json:"joined_at"`
+	// Timing
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+
+	// Status tracking
+	Status     NotificationStatus `json:"status"`
+	RetryCount int                `json:"retry_count"`
+	MaxRetries int                `json:"max_retries"`
+	LastError  *string            `json:"last_error,omitempty"`
+	CreatedAt  time.Time          `json:"created_at"`
+	UpdatedAt  time.Time          `json:"updated_at"`
+	SentAt     *time.Time         `json:"sent_at,omitempty"`
 }
 
+// Simplified builder pattern
 type NotificationBuilder struct {
-	notification *UnifiedNotification
+	notification *EmailNotification
 }
 
 func NewNotificationBuilder() *NotificationBuilder {
 	return &NotificationBuilder{
-		notification: &UnifiedNotification{
+		notification: &EmailNotification{
 			ID:           uuid.New(),
 			Status:       NotificationStatusPending,
 			CreatedAt:    time.Now(),
@@ -169,27 +109,21 @@ func (nb *NotificationBuilder) WithRecipient(userID uuid.UUID, email, name strin
 	return nb
 }
 
-func (nb *NotificationBuilder) WithPhone(phone string) *NotificationBuilder {
-	nb.notification.RecipientPhone = &phone
-	return nb
-}
-func (nb *NotificationBuilder) WithChannels(channels ...NotificationChannel) *NotificationBuilder {
-	nb.notification.Channels = channels
-	return nb
-}
 func (nb *NotificationBuilder) WithPriority(priority NotificationPriority) *NotificationBuilder {
 	nb.notification.Priority = priority
 	return nb
 }
+
 func (nb *NotificationBuilder) WithSubject(subject string) *NotificationBuilder {
 	nb.notification.Subject = subject
 	return nb
 }
-func (nb *NotificationBuilder) WithTemplate(templateID string, data map[string]interface{}) *NotificationBuilder {
-	nb.notification.TemplateID = templateID
+
+func (nb *NotificationBuilder) WithTemplateData(data map[string]interface{}) *NotificationBuilder {
 	nb.notification.TemplateData = data
 	return nb
 }
+
 func (nb *NotificationBuilder) WithEventContext(eventID uuid.UUID) *NotificationBuilder {
 	nb.notification.EventID = &eventID
 	return nb
@@ -205,8 +139,7 @@ func (nb *NotificationBuilder) WithWaitlistContext(waitlistEntryID uuid.UUID) *N
 	return nb
 }
 
-func (nb *NotificationBuilder) WithScheduling(scheduledFor *time.Time, expiresAt *time.Time) *NotificationBuilder {
-	nb.notification.ScheduledFor = scheduledFor
+func (nb *NotificationBuilder) WithExpiration(expiresAt *time.Time) *NotificationBuilder {
 	nb.notification.ExpiresAt = expiresAt
 	return nb
 }
@@ -216,87 +149,65 @@ func (nb *NotificationBuilder) WithMaxRetries(maxRetries int) *NotificationBuild
 	return nb
 }
 
-func (nb *NotificationBuilder) Build() *UnifiedNotification {
+func (nb *NotificationBuilder) Build() *EmailNotification {
 	return nb.notification
 }
 
+// Helper functions
 func GetDefaultPriority(notType NotificationType) NotificationPriority {
 	switch notType {
 	case NotificationTypeWaitlistSpotAvailable:
 		return NotificationPriorityHigh
-
-	case NotificationTypeWaitlistExpired,
-		NotificationTypeBookingConfirmed:
+	case NotificationTypeBookingConfirmed:
 		return NotificationPriorityMedium
-
 	case NotificationTypeWaitlistPositionUpdate:
 		return NotificationPriorityLow
-
 	default:
 		return NotificationPriorityMedium
 	}
 }
 
-func GetDefaultChannels(notType NotificationType) []NotificationChannel {
-	return []NotificationChannel{NotificationChannelEmail}
+// Utility methods
+func (en *EmailNotification) GetPartitionKey() string {
+	return en.RecipientID.String()
 }
 
-func (un *UnifiedNotification) GetPartitionKey() string {
-	return un.RecipientID.String()
+func (en *EmailNotification) ToJSON() ([]byte, error) {
+	return json.Marshal(en)
 }
 
-func (un *UnifiedNotification) ToJSON() ([]byte, error) {
-	return json.Marshal(un)
+func (en *EmailNotification) IsExpired() bool {
+	return en.ExpiresAt != nil && time.Now().After(*en.ExpiresAt)
 }
 
-func (un *UnifiedNotification) IsExpired() bool {
-	return un.ExpiresAt != nil && time.Now().After(*un.ExpiresAt)
+func (en *EmailNotification) ShouldRetry() bool {
+	return en.RetryCount < en.MaxRetries &&
+		en.Status == NotificationStatusFailed &&
+		!en.IsExpired()
 }
 
-func (un *UnifiedNotification) ShouldRetry() bool {
-	return un.RetryCount < un.MaxRetries &&
-		un.Status == NotificationStatusFailed &&
-		!un.IsExpired()
-}
-
-func (un *UnifiedNotification) MarkDelivered(channel NotificationChannel, messageID *string) {
+func (en *EmailNotification) MarkSent() {
 	now := time.Now()
-	un.Status = NotificationStatusDelivered
-	un.DeliveredAt = &now
-	un.UpdatedAt = now
-
-	attempt := DeliveryAttempt{
-		Channel:     channel,
-		AttemptedAt: now,
-		Status:      NotificationStatusDelivered,
-		MessageID:   messageID,
-	}
-	un.DeliveryAttempts = append(un.DeliveryAttempts, attempt)
+	en.Status = NotificationStatusSent
+	en.SentAt = &now
+	en.UpdatedAt = now
 }
 
-func (un *UnifiedNotification) MarkFailed(channel NotificationChannel, err error) {
+func (en *EmailNotification) MarkFailed(err error) {
 	now := time.Now()
-	un.Status = NotificationStatusFailed
-	un.UpdatedAt = now
+	en.Status = NotificationStatusFailed
+	en.UpdatedAt = now
 
 	errorStr := err.Error()
-	un.LastError = &errorStr
-
-	attempt := DeliveryAttempt{
-		Channel:     channel,
-		AttemptedAt: now,
-		Status:      NotificationStatusFailed,
-		Error:       &errorStr,
-	}
-	un.DeliveryAttempts = append(un.DeliveryAttempts, attempt)
+	en.LastError = &errorStr
 }
 
-func (un *UnifiedNotification) IncrementRetry() {
-	un.RetryCount++
-	un.UpdatedAt = time.Now()
-	if un.ShouldRetry() {
-		un.Status = NotificationStatusRetrying
+func (en *EmailNotification) IncrementRetry() {
+	en.RetryCount++
+	en.UpdatedAt = time.Now()
+	if en.ShouldRetry() {
+		en.Status = NotificationStatusRetrying
 	} else {
-		un.Status = NotificationStatusExpired
+		en.Status = NotificationStatusExpired
 	}
 }

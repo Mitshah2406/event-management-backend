@@ -12,8 +12,8 @@ import (
 )
 
 type NotificationService interface {
-	SendNotification(ctx context.Context, notification *UnifiedNotification) error
-	SendBatchNotifications(ctx context.Context, notifications []*UnifiedNotification) error
+	SendNotification(ctx context.Context, notification *EmailNotification) error
+	SendBatchNotifications(ctx context.Context, notifications []*EmailNotification) error
 
 	SendWaitlistNotification(ctx context.Context, userID uuid.UUID, email, name string,
 		eventID, waitlistEntryID uuid.UUID, notificationType NotificationType,
@@ -23,36 +23,27 @@ type NotificationService interface {
 		bookingID, eventID uuid.UUID, notificationType NotificationType,
 		templateData map[string]interface{}) error
 
-	SendEventNotification(ctx context.Context, userID uuid.UUID, email, name string,
-		eventID uuid.UUID, notificationType NotificationType,
-		templateData map[string]interface{}) error
-
 	Start(ctx context.Context) error
 	Stop() error
 	HealthCheck(ctx context.Context) error
 }
 
 type ServiceConfig struct {
-	Environment string
-
+	Environment        string
 	KafkaBrokers       []string
 	NotificationTopic  string
 	ConsumerGroupID    string
 	NumConsumerWorkers int
-
 	SMTPHost           string
 	SMTPPort           int
 	SMTPUsername       string
 	SMTPPassword       string
 	SMTPFromEmail      string
 	SMTPFromName       string
-	EnableEmailChannel bool
-	EnableSMSChannel   bool
-	EnablePushChannel  bool
 }
 
 func NewServiceConfigFromEnv() *ServiceConfig {
-	config := &ServiceConfig{
+	return &ServiceConfig{
 		Environment:        getEnvString("GIN_MODE", "development"),
 		KafkaBrokers:       []string{getEnvString("KAFKA_BROKERS", "localhost:9092")},
 		NotificationTopic:  getEnvString("NOTIFICATION_TOPIC", "notifications"),
@@ -64,19 +55,14 @@ func NewServiceConfigFromEnv() *ServiceConfig {
 		SMTPPassword:       getEnvString("SMTP_PASSWORD", ""),
 		SMTPFromEmail:      getEnvString("FROM_EMAIL", ""),
 		SMTPFromName:       getEnvString("SMTP_FROM_NAME", "Evently"),
-		EnableEmailChannel: getEnvBool("ENABLE_EMAIL_CHANNEL", true),
 	}
-
-	return config
 }
 
-type UnifiedNotificationService struct {
-	config    *ServiceConfig
-	producer  NotificationProducer
-	consumer  NotificationConsumer
-	publisher *NotificationPublisher
-
-	// Services
+type EmailNotificationService struct {
+	config       *ServiceConfig
+	producer     NotificationProducer
+	consumer     NotificationConsumer
+	publisher    *NotificationPublisher
 	emailService EmailService
 
 	// State
@@ -86,37 +72,17 @@ type UnifiedNotificationService struct {
 	cancel    context.CancelFunc
 }
 
-func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, error) {
+func NewEmailNotificationService(config *ServiceConfig) (NotificationService, error) {
 	if config == nil {
 		config = NewServiceConfigFromEnv()
 	}
 
-	producerConfig := DefaultKafkaProducerConfig()
-	producerConfig.Brokers = config.KafkaBrokers
-	producerConfig.NotificationTopic = config.NotificationTopic
-
-	producer, err := NewKafkaNotificationProducer(producerConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create notification producer: %w", err)
-	}
-
-	consumerConfig := DefaultConsumerConfig()
-	consumerConfig.Brokers = config.KafkaBrokers
-	consumerConfig.Topics = []string{config.NotificationTopic}
-	consumerConfig.GroupID = config.ConsumerGroupID
-
-	consumer, err := NewKafkaNotificationConsumer(consumerConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create notification consumer: %w", err)
-	}
-
-	publisher := NewNotificationPublisher(producer)
-
-	var emailService EmailService
+	// Validate SMTP configuration
 	if config.SMTPHost == "" || config.SMTPUsername == "" {
 		return nil, fmt.Errorf("SMTP configuration is required: missing SMTP_HOST or SMTP_USERNAME")
 	}
 
+	// Create SMTP email service
 	smtpConfig := &SMTPConfig{
 		Host:      config.SMTPHost,
 		Port:      config.SMTPPort,
@@ -126,12 +92,39 @@ func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, 
 		FromName:  config.SMTPFromName,
 		UseTLS:    true,
 	}
-	emailService = NewSMTPEmailService(smtpConfig)
-	log.Printf("📧 SMTP email service initialized (Host: %s, Port: %d)", config.SMTPHost, config.SMTPPort)
+	emailService := NewSMTPEmailService(smtpConfig)
+	if emailService == nil {
+		return nil, fmt.Errorf("failed to create SMTP email service")
+	}
+
+	// Create producer
+	producerConfig := DefaultKafkaProducerConfig()
+	producerConfig.Brokers = config.KafkaBrokers
+	producerConfig.NotificationTopic = config.NotificationTopic
+
+	producer, err := NewKafkaNotificationProducer(producerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create notification producer: %w", err)
+	}
+
+	// Create consumer
+	consumerConfig := DefaultConsumerConfig()
+	consumerConfig.Brokers = config.KafkaBrokers
+	consumerConfig.Topics = []string{config.NotificationTopic}
+	consumerConfig.GroupID = config.ConsumerGroupID
+
+	consumer, err := NewKafkaNotificationConsumer(consumerConfig, emailService)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create notification consumer: %w", err)
+	}
+
+	publisher := NewNotificationPublisher(producer)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &UnifiedNotificationService{
+	log.Printf("📧 Email notification service initialized (Host: %s, Port: %d)", config.SMTPHost, config.SMTPPort)
+
+	return &EmailNotificationService{
 		config:       config,
 		producer:     producer,
 		consumer:     consumer,
@@ -143,109 +136,96 @@ func NewUnifiedNotificationService(config *ServiceConfig) (NotificationService, 
 	}, nil
 }
 
-func (uns *UnifiedNotificationService) Start(ctx context.Context) error {
-	uns.mu.Lock()
-	defer uns.mu.Unlock()
+func (ens *EmailNotificationService) Start(ctx context.Context) error {
+	ens.mu.Lock()
+	defer ens.mu.Unlock()
 
-	if uns.isRunning {
+	if ens.isRunning {
 		return fmt.Errorf("notification service is already running")
 	}
 
-	log.Printf("🚀 Starting Unified Notification Service...")
+	log.Printf("🚀 Starting Email Notification Service...")
 
-	if uns.config.EnableEmailChannel {
-		emailHandler := NewEmailChannelHandler(uns.emailService)
-		if err := uns.consumer.RegisterHandler(NotificationChannelEmail, emailHandler); err != nil {
-			return fmt.Errorf("failed to register email handler: %w", err)
-		}
-	}
-
-	err := uns.consumer.StartConsumers(uns.ctx, uns.config.NumConsumerWorkers)
+	err := ens.consumer.StartConsumers(ens.ctx, ens.config.NumConsumerWorkers)
 	if err != nil {
 		return fmt.Errorf("failed to start consumers: %w", err)
 	}
 
-	uns.isRunning = true
-	log.Printf("✅ Unified Notification Service started successfully")
+	ens.isRunning = true
+	log.Printf("✅ Email Notification Service started successfully")
 
 	return nil
 }
 
-func (uns *UnifiedNotificationService) Stop() error {
-	uns.mu.Lock()
-	defer uns.mu.Unlock()
+func (ens *EmailNotificationService) Stop() error {
+	ens.mu.Lock()
+	defer ens.mu.Unlock()
 
-	if !uns.isRunning {
+	if !ens.isRunning {
 		return fmt.Errorf("notification service is not running")
 	}
 
-	log.Printf("🛑 Stopping Unified Notification Service...")
+	log.Printf("🛑 Stopping Email Notification Service...")
 
-	uns.cancel()
+	ens.cancel()
 
-	if err := uns.consumer.Stop(); err != nil {
+	if err := ens.consumer.Stop(); err != nil {
 		log.Printf("Error stopping consumer: %v", err)
 	}
 
-	if err := uns.producer.Close(); err != nil {
+	if err := ens.producer.Close(); err != nil {
 		log.Printf("Error closing producer: %v", err)
 	}
 
-	uns.isRunning = false
-	log.Printf("✅ Unified Notification Service stopped")
+	ens.isRunning = false
+	log.Printf("✅ Email Notification Service stopped")
 
 	return nil
 }
 
-func (uns *UnifiedNotificationService) SendNotification(ctx context.Context, notification *UnifiedNotification) error {
-	return uns.producer.PublishNotification(ctx, notification)
+func (ens *EmailNotificationService) SendNotification(ctx context.Context, notification *EmailNotification) error {
+	return ens.producer.PublishNotification(ctx, notification)
 }
 
-func (uns *UnifiedNotificationService) SendBatchNotifications(ctx context.Context, notifications []*UnifiedNotification) error {
-	return uns.producer.PublishBatchNotifications(ctx, notifications)
+func (ens *EmailNotificationService) SendBatchNotifications(ctx context.Context, notifications []*EmailNotification) error {
+	return ens.producer.PublishBatchNotifications(ctx, notifications)
 }
 
-func (uns *UnifiedNotificationService) SendWaitlistNotification(ctx context.Context, userID uuid.UUID, email, name string,
+func (ens *EmailNotificationService) SendWaitlistNotification(ctx context.Context, userID uuid.UUID, email, name string,
 	eventID, waitlistEntryID uuid.UUID, notificationType NotificationType,
 	templateData map[string]interface{}) error {
 
-	return uns.publisher.PublishWaitlistNotification(ctx, userID, email, name, eventID, waitlistEntryID, notificationType, templateData)
+	return ens.publisher.PublishWaitlistNotification(ctx, userID, email, name, eventID, waitlistEntryID, notificationType, templateData)
 }
 
-func (uns *UnifiedNotificationService) SendBookingNotification(ctx context.Context, userID uuid.UUID, email, name string,
+func (ens *EmailNotificationService) SendBookingNotification(ctx context.Context, userID uuid.UUID, email, name string,
 	bookingID, eventID uuid.UUID, notificationType NotificationType,
 	templateData map[string]interface{}) error {
 
-	return uns.publisher.PublishBookingNotification(ctx, userID, email, name, bookingID, eventID, notificationType, templateData)
+	return ens.publisher.PublishBookingNotification(ctx, userID, email, name, bookingID, eventID, notificationType, templateData)
 }
 
-func (uns *UnifiedNotificationService) SendEventNotification(ctx context.Context, userID uuid.UUID, email, name string,
-	eventID uuid.UUID, notificationType NotificationType,
-	templateData map[string]interface{}) error {
-
-	return uns.publisher.PublishEventNotification(ctx, userID, email, name, eventID, notificationType, templateData)
-}
-
-func (uns *UnifiedNotificationService) HealthCheck(ctx context.Context) error {
-	uns.mu.RLock()
-	isRunning := uns.isRunning
-	uns.mu.RUnlock()
+func (ens *EmailNotificationService) HealthCheck(ctx context.Context) error {
+	ens.mu.RLock()
+	isRunning := ens.isRunning
+	ens.mu.RUnlock()
 
 	if !isRunning {
 		return fmt.Errorf("notification service is not running")
 	}
 
-	if err := uns.producer.HealthCheck(ctx); err != nil {
+	if err := ens.producer.HealthCheck(ctx); err != nil {
 		return fmt.Errorf("producer health check failed: %w", err)
 	}
 
-	if err := uns.consumer.HealthCheck(ctx); err != nil {
+	if err := ens.consumer.HealthCheck(ctx); err != nil {
 		return fmt.Errorf("consumer health check failed: %w", err)
 	}
 
 	return nil
 }
 
+// Helper functions for environment variables
 func getEnvString(key, defaultValue string) string {
 	value := os.Getenv(key)
 	if value == "" {
@@ -264,45 +244,4 @@ func getEnvInt(key string, defaultValue int) int {
 		return defaultValue
 	}
 	return intValue
-}
-
-func getEnvBool(key string, defaultValue bool) bool {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	boolValue, err := strconv.ParseBool(value)
-	if err != nil {
-		return defaultValue
-	}
-	return boolValue
-}
-
-var (
-	globalService NotificationService
-	globalOnce    sync.Once
-)
-
-func GetGlobalNotificationService() NotificationService {
-	globalOnce.Do(func() {
-		config := NewServiceConfigFromEnv()
-		service, err := NewUnifiedNotificationService(config)
-		if err != nil {
-			log.Fatalf("Failed to initialize global notification service: %v", err)
-		}
-		globalService = service
-	})
-	return globalService
-}
-
-func InitializeGlobalNotificationService(ctx context.Context) error {
-	service := GetGlobalNotificationService()
-	return service.Start(ctx)
-}
-
-func StopGlobalNotificationService() error {
-	if globalService != nil {
-		return globalService.Stop()
-	}
-	return nil
 }
