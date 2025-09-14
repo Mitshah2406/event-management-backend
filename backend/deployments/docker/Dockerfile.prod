@@ -60,6 +60,42 @@ COPY --from=builder --chown=appuser:appgroup /app/docs/swagger.yaml ./docs/swagg
 # Make binary executable
 RUN chmod +x ./server
 
+# Set production environment variables
+ENV PORT=8080 \
+    GIN_MODE=release \
+    API_VERSION=v1 \
+    API_PREFIX=/api \
+    DB_HOST=postgres \
+    DB_PORT=5432 \
+    DB_USER=evently_user \
+    DB_PASSWORD=JOUBkINjIQNvK1EsEFHne25nwVBr6EVr1465u4srQ/o= \
+    DB_NAME=evently_prod \
+    DB_SSLMODE=disable \
+    REDIS_HOST=redis \
+    REDIS_PORT=6379 \
+    REDIS_PASSWORD=E21bQHdy4NoCyQd6PQqkHSAym+eWWEnQTiZMNCzcJp8= \
+    REDIS_DB=0 \
+    JWT_SECRET=zNk3VfT8v4jCirrZn9cqh7cFcEUlIdoxw1fxF0FMmfyAndzFVLEbGP/Vn2ocM6uvfcPSv2AREe5jdeuBAY4IFQ== \
+    JWT_EXPIRES_IN=86400 \
+    JWT_REFRESH_EXPIRES_IN=86400 \
+    RATE_LIMIT_ENABLED=true \
+    RATE_LIMIT_WINDOW_DURATION=60s \
+    RATE_LIMIT_DEFAULT_REQUESTS=200 \
+    RATE_LIMIT_PUBLIC_REQUESTS=500 \
+    RATE_LIMIT_USER_REQUESTS=300 \
+    RATE_LIMIT_AUTH_REQUESTS=60 \
+    RATE_LIMIT_BOOKING_REQUESTS=200 \
+    RATE_LIMIT_BOOKING_CRITICAL_REQUESTS=50 \
+    RATE_LIMIT_ADMIN_REQUESTS=1200 \
+    RATE_LIMIT_ANALYTICS_REQUESTS=120 \
+    RATE_LIMIT_HEALTH_REQUESTS=1000 \
+    RATE_LIMIT_WHITELISTED_IPS=127.0.0.1,::1 \
+    SMTP_HOST=smtp.gmail.com \
+    SMTP_PORT=587 \
+    SMTP_USERNAME=elitecoders89@gmail.com \
+    SMTP_PASSWORD=khoydlnfiirzftne \
+    FROM_EMAIL=elitecoders89@gmail.com
+
 # Switch to non-root user
 USER appuser
 

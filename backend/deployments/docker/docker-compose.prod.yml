@@ -10,55 +10,12 @@ services:
     restart: unless-stopped
     ports:
       - "9000:8080"
-    env_file:
-      - ../../.env  # Let Docker Compose handle the .env file
     environment:
-      # Server Configuration
-      - PORT=8080
-      - GIN_MODE=release
-      - API_VERSION=v1
-      - API_PREFIX=/api
-      
-      # Database Configuration
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-evently_prod}
-      - DB_USER=${DB_USER:-evently_user}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_SSLMODE=disable
-      
-      # Redis Configuration
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_DB=0
-      
       # Kafka Configuration
       - KAFKA_BROKERS=kafka:9093
       - KAFKA_CLIENT_ID=evently-backend
       - KAFKA_AUTO_OFFSET_RESET=earliest
       - KAFKA_ENABLE_AUTO_COMMIT=true
-      
-      # JWT Configuration
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_EXPIRES_IN=900
-      - JWT_REFRESH_EXPIRES_IN=86400
-      
-      # Rate Limiting
-      - RATE_LIMIT_ENABLED=true
-      - RATE_LIMIT_WINDOW_DURATION=60s
-      - RATE_LIMIT_DEFAULT_REQUESTS=100
-      - RATE_LIMIT_PUBLIC_REQUESTS=200
-      - RATE_LIMIT_AUTH_REQUESTS=30
-      - RATE_LIMIT_BOOKING_REQUESTS=50
-      - RATE_LIMIT_ADMIN_REQUESTS=300
-      
-      # Email Configuration (optional for initial deployment)
-      - SMTP_HOST=${SMTP_HOST:-}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USERNAME=${SMTP_USERNAME:-}
-      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
-      - FROM_EMAIL=${FROM_EMAIL:-noreply@evently.com}
       
       # Logging
       - LOG_LEVEL=info
