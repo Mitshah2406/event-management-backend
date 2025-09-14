@@ -96,3 +96,6 @@ secrets/
 
 # Build cache
 .buildcache/
+
+deployments/docker/docker-compose.prod.yml
+deployments/docker/Dockerfile.prod
