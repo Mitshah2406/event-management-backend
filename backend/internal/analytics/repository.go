@@ -1139,21 +1139,23 @@ func (r *repository) GetCancellationAnalytics() (*CancellationAnalytics, error) 
 	// Get cancellation trends
 	var trendData []CancellationTrend
 	err = r.db.Raw(`
-		SELECT 
-			DATE(cancelled_at) as date,
-			COUNT(*) as cancellations,
-			COUNT(*)::float / (
-				SELECT COUNT(*) 
-				FROM bookings b2 
-				WHERE DATE(b2.created_at) = DATE(b1.cancelled_at)
-			) * 100 as cancellation_rate,
-			COALESCE(SUM(total_price), 0) as refund_amount
-		FROM bookings b1
-		WHERE status = 'CANCELLED' 
-			AND cancelled_at IS NOT NULL
-			AND cancelled_at >= ?
-		GROUP BY DATE(cancelled_at)
-		ORDER BY date
+		WITH daily_bookings AS (
+    SELECT DATE(created_at) AS date, COUNT(*) AS total_bookings
+    FROM bookings
+    GROUP BY DATE(created_at)
+)
+SELECT 
+    DATE(b1.cancelled_at) AS date,
+    COUNT(*) AS cancellations,
+    COUNT(*)::float / db.total_bookings * 100 AS cancellation_rate,
+    COALESCE(SUM(b1.total_price), 0) AS refund_amount
+FROM bookings b1
+JOIN daily_bookings db ON db.date = DATE(b1.cancelled_at)
+WHERE b1.status = 'CANCELLED' 
+  AND b1.cancelled_at IS NOT NULL
+  AND b1.cancelled_at >= ?
+GROUP BY DATE(b1.cancelled_at), db.total_bookings
+ORDER BY date;
 	`, time.Now().AddDate(0, 0, -30)).Scan(&trendData).Error
 
 	if err != nil {

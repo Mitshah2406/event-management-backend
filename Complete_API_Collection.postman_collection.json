@@ -23,7 +23,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"first_name\": \"Dummy\",\n    \"last_name\": \"Doe\",\n    \"email\": \"dummy@gmail.com\",\n    \"password\": \"qwerty\"\n}",
+							"raw": "{\n    \"first_name\": \"Mit\",\n    \"last_name\": \"Shah\",\n    \"email\": \"admin@gmail.com\",\n\"role\":\"admin\",\n    \"password\": \"qwerty\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -55,7 +55,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"email\": \"mitshah2406.work@gmail.com\",\n    \"password\": \"qwerty\"\n}",
+							"raw": "{\n    \"email\": \"admin@gmail.com\",\n    \"password\": \"qwerty\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -172,12 +172,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/dashboard",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/dashboard",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"dashboard"
 											]
 										},
@@ -206,12 +207,12 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/events",
+											"raw": "{{DEV_BASE_URL}}/admin/events",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
-												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"events"
 											]
 										},
@@ -235,12 +236,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/events/:event_id",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/events/:event_id",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"events",
 												":event_id"
 											],
@@ -277,12 +279,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/tags",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/tags",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"tags"
 											]
 										},
@@ -306,12 +309,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/tags/popularity",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/tags/popularity",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"tags",
 												"popularity"
 											]
@@ -336,12 +340,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/tags/trends?months=6",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/tags/trends?months=6",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"tags",
 												"trends"
 											],
@@ -373,12 +378,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/tags/comparisons",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/tags/comparisons",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"tags",
 												"comparisons"
 											]
@@ -408,12 +414,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/bookings",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/bookings",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"bookings"
 											]
 										},
@@ -437,12 +444,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/bookings/daily",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/bookings/daily",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"bookings",
 												"daily"
 											]
@@ -467,12 +475,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/bookings/cancellations",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/bookings/cancellations",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"bookings",
 												"cancellations"
 											]
@@ -502,12 +511,13 @@
 										"method": "GET",
 										"header": [],
 										"url": {
-											"raw": "{{DEV_ADMIN_URL}}/{{ANALYTICS_PREFIX}}/users",
+											"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/admin/users",
 											"host": [
-												"{{DEV_ADMIN_URL}}"
+												"{{DEV_BASE_URL}}"
 											],
 											"path": [
 												"{{ANALYTICS_PREFIX}}",
+												"admin",
 												"users"
 											]
 										},
@@ -539,13 +549,13 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{DEV_BASE_URL}}/user/{{ANALYTICS_PREFIX}}/personal",
+									"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/user/personal",
 									"host": [
 										"{{DEV_BASE_URL}}"
 									],
 									"path": [
-										"user",
 										"{{ANALYTICS_PREFIX}}",
+										"user",
 										"personal"
 									]
 								},
@@ -569,13 +579,13 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{DEV_BASE_URL}}/user/{{ANALYTICS_PREFIX}}/bookings/history",
+									"raw": "{{DEV_BASE_URL}}/{{ANALYTICS_PREFIX}}/user/bookings/history",
 									"host": [
 										"{{DEV_BASE_URL}}"
 									],
 									"path": [
-										"user",
 										"{{ANALYTICS_PREFIX}}",
+										"user",
 										"bookings",
 										"history"
 									]
@@ -639,13 +649,13 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{DEV_BASE_URL}}/{{EVENTS_PREFIX}}/103c61a8-2a67-4b4d-8bb0-2bae531db912",
+									"raw": "{{DEV_BASE_URL}}/{{EVENTS_PREFIX}}/132903c2-e902-4a06-8cf7-7df5799d25c3",
 									"host": [
 										"{{DEV_BASE_URL}}"
 									],
 									"path": [
 										"{{EVENTS_PREFIX}}",
-										"103c61a8-2a67-4b4d-8bb0-2bae531db912"
+										"132903c2-e902-4a06-8cf7-7df5799d25c3"
 									]
 								},
 								"description": "Get detailed information about a specific event"
@@ -679,7 +689,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"name\": \"Rock Concert 2024\",\n    \"description\": \"Amazing rock concert featuring top artists\",\n    \"venue\": \"Madison Square Garden\",\n    \"venue_template_id\": \"2550a13f-0436-4a21-9de5-7594af4d14d0\",\n    \"date_time\": \"2025-12-15T20:00:00Z\",\n    \"base_price\": 100.00,\n    \"tags\": [\"concert\", \"music\", \"rock\"],\n    \"section_pricing\": [\n        {\n            \"section_id\": \"496d0ac7-7ff1-461d-ba4b-388a8186ba5c\",\n            \"price_multiplier\": 1.0\n        },\n        {\n            \"section_id\": \"7a4e934e-ea60-44ad-95b3-812ed1f92057\",\n            \"price_multiplier\": 2.0\n        }\n    ]\n}",
+									"raw": "{\n    \"name\": \"Cricket Meetup\",\n    \"description\": \"Cricket Meetup\",\n    \"venue\": \"Sample Theatre\",\n    \"venue_template_id\": \"c021e826-a7c1-42a1-b3b4-b42fc2250465\",\n    \"date_time\": \"2025-12-15T20:00:00Z\",\n    \"base_price\": 100.00,\n    \"tags\": [\"technology\", \"sports\"],\n    \"section_pricing\": [\n        {\n            \"section_id\": \"0fb9073a-7f76-4967-82dd-7b6d53081f5e\",\n            \"price_multiplier\": 1.0\n        },\n        {\n            \"section_id\": \"1f3739d3-6f3e-462b-b55a-ca02dd347250\",\n            \"price_multiplier\": 2.0\n        }\n    ]\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -908,7 +918,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"name\": \"Technology\",\n    \"slug\": \"technology\",\n    \"color\": \"#4ECDC4\",\n    \"description\": \"Technology related events and conferences\"\n}",
+									"raw": "{\n    \"name\": \"Sports\",\n    \"slug\": \"sports\",\n    \"color\": \"#4ECDC4\",\n    \"description\": \"sports\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -1240,7 +1250,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"hold_id\": \"0917caeb-e0d9-46b8-a945-e195621df54d\",\n    \"event_id\": \"103c61a8-2a67-4b4d-8bb0-2bae531db912\",\n    \"payment_method\": \"credit_card\"\n}",
+									"raw": "{\n    \"hold_id\": \"9fec7040-97e4-4e85-9e5b-362dfcc589ee\",\n    \"event_id\": \"132903c2-e902-4a06-8cf7-7df5799d25c3\",\n    \"payment_method\": \"credit_card\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -1373,7 +1383,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"name\": \"Concert Hall\",\n    \"description\": \"Medium-sized concert venue\",\n    \"default_rows\": 10,\n    \"default_seats_per_row\": 20,\n    \"layout_type\": \"THEATER\"\n}",
+									"raw": "{\n    \"name\": \"Theatre\",\n    \"description\": \"Medium-sized concert venue\",\n    \"default_rows\": 10,\n    \"default_seats_per_row\": 20,\n    \"layout_type\": \"THEATER\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -1567,7 +1577,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"template_id\": \"2550a13f-0436-4a21-9de5-7594af4d14d0\",\n    \"name\": \"VIP Section\",\n    \"description\": \"Premium seating area\",\n    \"row_start\": \"A\",\n    \"row_end\": \"F\",\n    \"seats_per_row\": 10,\n    \"total_seats\": 60\n}",
+									"raw": "{\n    \"template_id\": \"c021e826-a7c1-42a1-b3b4-b42fc2250465\",\n    \"name\": \"Standard Section\",\n    \"description\": \"Normal seating area\",\n    \"row_start\": \"N\",\n    \"row_end\": \"Z\",\n    \"seats_per_row\": 1,\n    \"total_seats\": 13\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -1965,7 +1975,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"event_id\": \"103c61a8-2a67-4b4d-8bb0-2bae531db912\",\n    \"seat_ids\": [\n   \"3dcdd878-61f2-45d1-ab6b-90dde377585d\",\n    \"d4e76b64-c95c-4d03-bb3f-6f65d821004a\",\n    \"fc6236b6-3611-401f-bf7b-69f8ed58eb2b\",\n    \"3deff41d-fdcc-4fd8-9ee0-fb6bdac4a863\",\n    \"157bdedd-f64b-437f-9dd3-7dcc3aff4fda\",\n    \"66f0843e-9af6-46fc-8fb4-fdcba731ad36\",\n    \"790bbf87-f0e3-4a56-9790-06e8d225915e\"\n],\n    \"user_id\": \"f2fef2d7-94dd-4181-8801-7434e08ebd53\"\n}",
+									"raw": "{\n    \"event_id\": \"132903c2-e902-4a06-8cf7-7df5799d25c3\",\n    \"seat_ids\": [\n        \"5dd8857c-becb-4820-82b2-38bde74d8c80\",\n        \"7825ef47-1e4c-44d4-b375-d270c1741900\",\n        \"e4ce4eb5-e421-4963-a0e3-b162c542bec1\",\n        \"8f888bc3-8ace-4e85-ac79-865223699c11\",\n        \"3e70cfaa-e64c-4b3e-b15c-fc7a229bb11e\",\n        \"54a54deb-8277-49db-8016-1e968bdaf22f\",\n        \"e4b2dcf3-b86d-4a51-b781-7c4dda150606\",\n        \"33f0c944-a450-49dd-9d39-1c089143241e\",\n        \"ff857571-e727-4fb8-9fc0-71e1e7dfbabb\",\n        \"e54ba05a-2763-4c79-8bb1-26bb3fd27cb3\",\n        \"e2a123fa-d16b-4277-8f9f-afcc2067d875\",\n        \"2ee05d25-be67-4445-aa51-65ff014342fc\",\n        \"dcff4a74-5cb3-4835-a9e6-8e1fa0c14f76\"\n    ],\n    \"user_id\": \"64e1adf2-538e-4eb7-ac49-bde31fe346c4\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2137,7 +2147,7 @@
 									"variable": [
 										{
 											"key": "sectionId",
-											"value": "6ac4cde9-dc10-4931-aa60-d4b42c947c5b",
+											"value": "1f3739d3-6f3e-462b-b55a-ca02dd347250",
 											"description": "section id"
 										}
 									]
@@ -2177,7 +2187,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"event_id\": \"{{EVENT_ID}}\",\n    \"quantity\": 7,\n    \"preferences\": {\n        \"section_preference\": \"VIP\",\n        \"notification_channels\": [\"EMAIL\", \"SMS\"]\n    }\n}",
+									"raw": "{\n    \"event_id\": \"{{EVENT_ID}}\",\n    \"quantity\": 7,\n    \"preferences\": {\n        \"section_preference\": \"VIP\",\n        \"notification_channels\": [\"EMAIL\"]\n    }\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2495,6 +2505,141 @@
 					]
 				}
 			]
+		},
+		{
+			"name": "Cancellation Policy",
+			"item": [
+				{
+					"name": "cancellation policy",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ADMIN_TOKEN}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"allow_cancellation\": true,\n  \"cancellation_deadline\": \"2025-10-20T23:59:59Z\",\n  \"fee_type\": \"PERCENTAGE\",\n  \"fee_amount\": 15.0,\n  \"refund_processing_days\": 7\n}\n"
+						},
+						"url": {
+							"raw": "{{DEV_ADMIN_URL}}/{{EVENTS_PREFIX}}/:event_id/cancellation-policy",
+							"host": [
+								"{{DEV_ADMIN_URL}}"
+							],
+							"path": [
+								"{{EVENTS_PREFIX}}",
+								":event_id",
+								"cancellation-policy"
+							],
+							"variable": [
+								{
+									"key": "event_id",
+									"value": "132903c2-e902-4a06-8cf7-7df5799d25c3"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cancellation Policy",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ADMIN_TOKEN}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"allow_cancellation\": true,\n  \"cancellation_deadline\": \"2025-10-20T23:59:59Z\",\n  \"fee_type\": \"PERCENTAGE\",\n  \"fee_amount\": 15.0,\n  \"refund_processing_days\": 7\n}\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{DEV_ADMIN_URL}}/{{EVENTS_PREFIX}}/:event_id/cancellation-policy",
+							"host": [
+								"{{DEV_ADMIN_URL}}"
+							],
+							"path": [
+								"{{EVENTS_PREFIX}}",
+								":event_id",
+								"cancellation-policy"
+							],
+							"variable": [
+								{
+									"key": "event_id",
+									"value": "132903c2-e902-4a06-8cf7-7df5799d25c3"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Cancellation Policy",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{ADMIN_TOKEN}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"allow_cancellation\": true,\n  \"cancellation_deadline\": \"2025-10-20T23:59:59Z\",\n  \"fee_type\": \"PERCENTAGE\",\n  \"fee_amount\": 15.0,\n  \"refund_processing_days\": 7\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{DEV_ADMIN_URL}}/{{EVENTS_PREFIX}}/:event_id/cancellation-policy",
+					"host": [
+						"{{DEV_ADMIN_URL}}"
+					],
+					"path": [
+						"{{EVENTS_PREFIX}}",
+						":event_id",
+						"cancellation-policy"
+					],
+					"variable": [
+						{
+							"key": "event_id",
+							"value": "132903c2-e902-4a06-8cf7-7df5799d25c3"
+						}
+					]
+				}
+			},
+			"response": []
 		}
 	],
 	"variable": [
