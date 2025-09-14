@@ -16,6 +16,7 @@ It is a robust backend system designed to handle large-scale event bookings with
 - 📖 **API Documentation**: [https://evently-api.mitshah.dev/docs](https://evently-api.mitshah.dev/docs)
 - 🐙 **GitHub Repository**: [https://github.com/Mitshah2406/event-management-backend](https://github.com/Mitshah2406/event-management-backend)
 - 📝 **Postman Collection**: [Complete_API_Collection.postman_collection.json](Complete_API_Collection.postman_collection.json)
+- 🧑‍💻 **Techincal Documentation**: [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md)
 - 🎥 **Video Demo**: _[Coming Soon]_
 
 ---

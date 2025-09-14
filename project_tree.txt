@@ -135,10 +135,18 @@
 │       ├── build-errors.log
 │       ├── main
 │       └── server
+├── Booking Success Flow.png
+├── Cancellation Flow.png
+├── Complete_API_Collection.postman_collection.json
 ├── ER Diagram.png
 ├── Evently - Challenge.pdf
-├── Evently-Task.txt
+├── High Level Architecture (Business Flow).png
 ├── project_tree.txt
-└── SEED_SUMMARY.md
+├── README.md
+├── SEED_SUMMARY.md
+├── SUCCESSFUL_BOOKING_FLOW.md
+├── Task.txt
+├── TECHNICAL_DOCUMENTATION.md
+└── Waitlist Queue Logic Flow.png
 
-36 directories, 106 files
+36 directories, 114 files
