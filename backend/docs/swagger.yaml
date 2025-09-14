@@ -1,0 +1,2978 @@
+openapi: 3.0.3
+info:
+  title: Event System Backend API
+  version: 1.0.0
+  description: |
+    This is the backend API for Event Booking - a comprehensive event management and booking platform.
+    It provides endpoints for managing events, venues, bookings, waitlists, seats, and analytics.
+
+    ## Features
+    - Event management and discovery
+    - Venue and seating management
+    - Real-time seat booking with hold mechanism
+    - Waitlist management for sold-out events
+    - Booking and cancellation handling
+    - Comprehensive analytics
+    - Role-based access control (USER/ADMIN)
+
+  contact:
+    name: Evently API Team
+    email: mitshah2406.work@gmail.com
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Development server
+  - url: https://evently-api.mitshah.dev.com/api/v1
+    description: Production server
+
+security:
+  - Bearer: []
+
+components:
+  securitySchemes:
+    Bearer:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "Enter: Bearer {your-token}"
+
+  schemas:
+    # Common Schemas
+    UUID:
+      type: string
+      format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+    Timestamp:
+      type: string
+      format: date-time
+      example: "2024-01-15T10:30:00Z"
+
+    PaginationQuery:
+      type: object
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+          example: 10
+        offset:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 0
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "error"
+        message:
+          type: string
+          example: "Invalid request"
+        data:
+          type: object
+          nullable: true
+        error:
+          type: string
+          example: "Validation failed"
+
+    SuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        message:
+          type: string
+          example: "Operation completed successfully"
+        data:
+          type: object
+
+    # Auth Schemas
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          minLength: 6
+          example: "password123"
+
+    RegisterRequest:
+      type: object
+      required:
+        - first_name
+        - last_name
+        - email
+        - password
+      properties:
+        first_name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "John"
+        last_name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Doe"
+        email:
+          type: string
+          format: email
+          example: "john.doe@example.com"
+        password:
+          type: string
+          minLength: 6
+          example: "securepassword123"
+        role:
+          type: string
+          enum: ["USER", "ADMIN"]
+          default: "USER"
+          example: "USER"
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/UserResponse"
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expires_in:
+          type: integer
+          example: 3600
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        first_name:
+          type: string
+          example: "John"
+        last_name:
+          type: string
+          example: "Doe"
+        email:
+          type: string
+          format: email
+          example: "john.doe@example.com"
+        role:
+          type: string
+          enum: ["USER", "ADMIN"]
+          example: "USER"
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - current_password
+        - new_password
+      properties:
+        current_password:
+          type: string
+          example: "oldpassword123"
+        new_password:
+          type: string
+          minLength: 6
+          example: "newpassword123"
+
+    # Event Schemas
+    Event:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        title:
+          type: string
+          example: "Summer Music Festival"
+        description:
+          type: string
+          example: "An amazing outdoor music festival featuring top artists"
+        venue_template_id:
+          $ref: "#/components/schemas/UUID"
+        start_time:
+          $ref: "#/components/schemas/Timestamp"
+        end_time:
+          $ref: "#/components/schemas/Timestamp"
+        capacity:
+          type: integer
+          example: 5000
+        available_seats:
+          type: integer
+          example: 4850
+        status:
+          type: string
+          enum: ["DRAFT", "PUBLISHED", "CANCELLED", "COMPLETED"]
+          example: "PUBLISHED"
+        created_by:
+          $ref: "#/components/schemas/UUID"
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+
+    CreateEventRequest:
+      type: object
+      required:
+        - title
+        - description
+        - venue_template_id
+        - start_time
+        - end_time
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 200
+          example: "Summer Music Festival"
+        description:
+          type: string
+          example: "An amazing outdoor music festival"
+        venue_template_id:
+          $ref: "#/components/schemas/UUID"
+        start_time:
+          $ref: "#/components/schemas/Timestamp"
+        end_time:
+          $ref: "#/components/schemas/Timestamp"
+        tag_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/UUID"
+          example: []
+
+    # Venue Schemas
+    VenueTemplate:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+          example: "Madison Square Garden"
+        description:
+          type: string
+          example: "Famous indoor arena in New York City"
+        capacity:
+          type: integer
+          example: 20000
+        layout_type:
+          type: string
+          enum: ["THEATER", "STADIUM", "CONFERENCE", "OUTDOOR"]
+          example: "STADIUM"
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/Section"
+
+    Section:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+          example: "VIP Section A"
+        template_id:
+          $ref: "#/components/schemas/UUID"
+        base_price:
+          type: number
+          format: decimal
+          example: 150.00
+        seat_count:
+          type: integer
+          example: 100
+        section_type:
+          type: string
+          enum: ["VIP", "PREMIUM", "STANDARD", "BALCONY"]
+          example: "VIP"
+
+    # Seat Schemas
+    Seat:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        section_id:
+          $ref: "#/components/schemas/UUID"
+        seat_number:
+          type: string
+          example: "A-15"
+        row:
+          type: string
+          example: "A"
+        price:
+          type: number
+          format: decimal
+          example: 150.00
+        status:
+          type: string
+          enum: ["AVAILABLE", "HELD", "BOOKED", "UNAVAILABLE"]
+          example: "AVAILABLE"
+        section_name:
+          type: string
+          example: "VIP Section A"
+
+    HoldSeatsRequest:
+      type: object
+      required:
+        - event_id
+        - seat_ids
+        - user_id
+      properties:
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        seat_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/UUID"
+          minItems: 1
+        user_id:
+          $ref: "#/components/schemas/UUID"
+
+    SeatHoldResponse:
+      type: object
+      properties:
+        hold_id:
+          type: string
+          example: "hold_abc123def456"
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        seats:
+          type: array
+          items:
+            $ref: "#/components/schemas/Seat"
+        expires_at:
+          $ref: "#/components/schemas/Timestamp"
+        total_price:
+          type: number
+          format: decimal
+          example: 450.00
+
+    # Booking Schemas
+    Booking:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        user_id:
+          $ref: "#/components/schemas/UUID"
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        total_price:
+          type: number
+          format: decimal
+          example: 450.00
+        total_seats:
+          type: integer
+          example: 3
+        status:
+          type: string
+          enum: ["CONFIRMED", "CANCELLED", "REFUNDED"]
+          example: "CONFIRMED"
+        booking_ref:
+          type: string
+          example: "BK-2024-001234"
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+        seats:
+          type: array
+          items:
+            $ref: "#/components/schemas/Seat"
+
+    ConfirmBookingRequest:
+      type: object
+      required:
+        - hold_id
+        - event_id
+        - payment_method
+      properties:
+        hold_id:
+          type: string
+          example: "hold_abc123def456"
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        payment_method:
+          type: string
+          enum: ["credit_card", "debit_card", "paypal", "stripe"]
+          example: "credit_card"
+
+    # Waitlist Schemas
+    WaitlistEntry:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        user_id:
+          $ref: "#/components/schemas/UUID"
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        tickets_requested:
+          type: integer
+          example: 2
+        status:
+          type: string
+          enum: ["ACTIVE", "NOTIFIED", "CONVERTED", "EXPIRED", "CANCELLED"]
+          example: "ACTIVE"
+        position:
+          type: integer
+          example: 15
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+
+    JoinWaitlistRequest:
+      type: object
+      required:
+        - event_id
+        - tickets_requested
+      properties:
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        tickets_requested:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 2
+
+    # Tag Schemas
+    Tag:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        name:
+          type: string
+          example: "Music"
+        color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+          example: "#FF5733"
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+
+    CreateTagRequest:
+      type: object
+      required:
+        - name
+        - color
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: "Music"
+        color:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+          example: "#FF5733"
+
+    # Analytics Schemas
+    EventAnalytics:
+      type: object
+      properties:
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        event_title:
+          type: string
+          example: "Summer Music Festival"
+        total_bookings:
+          type: integer
+          example: 150
+        total_revenue:
+          type: number
+          format: decimal
+          example: 45000.00
+        seats_sold:
+          type: integer
+          example: 150
+        seats_available:
+          type: integer
+          example: 4850
+        conversion_rate:
+          type: number
+          format: decimal
+          example: 0.85
+        waitlist_entries:
+          type: integer
+          example: 25
+
+    GlobalAnalytics:
+      type: object
+      properties:
+        total_events:
+          type: integer
+          example: 25
+        total_bookings:
+          type: integer
+          example: 1250
+        total_revenue:
+          type: number
+          format: decimal
+          example: 125000.00
+        average_utilization:
+          type: number
+          format: decimal
+          example: 0.78
+        most_popular_events:
+          type: array
+          items:
+            type: object
+            properties:
+              event_id:
+                $ref: "#/components/schemas/UUID"
+              event_name:
+                type: string
+              booking_count:
+                type: integer
+              utilization:
+                type: number
+              revenue:
+                type: number
+        booking_trends:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyBooking"
+        events_by_status:
+          type: object
+          additionalProperties:
+            type: integer
+        revenue_by_month:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+              revenue:
+                type: number
+              events:
+                type: integer
+
+    DailyBooking:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        bookings:
+          type: integer
+        revenue:
+          type: number
+          format: decimal
+
+    # Updated Seat Schemas to match actual DTOs
+    SeatHoldDetails:
+      type: object
+      properties:
+        hold_id:
+          type: string
+        user_id:
+          $ref: "#/components/schemas/UUID"
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        seat_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/UUID"
+        ttl:
+          type: integer
+
+    # Booking Schemas Update
+    BookingConfirmationRequest:
+      type: object
+      required:
+        - hold_id
+        - event_id
+        - payment_method
+      properties:
+        hold_id:
+          type: string
+          example: "hold_abc123def456"
+        event_id:
+          $ref: "#/components/schemas/UUID"
+        payment_method:
+          type: string
+          enum: ["credit_card", "debit_card", "paypal", "stripe"]
+          example: "credit_card"
+
+paths:
+  # Health & Status Endpoints
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Returns the health status of the API service
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    $ref: "#/components/schemas/Timestamp"
+                  service:
+                    type: string
+                    example: "evently-backend"
+        "503":
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ping:
+    get:
+      tags:
+        - Health
+      summary: Ping endpoint
+      description: Simple ping endpoint to check if API is responding
+      responses:
+        "200":
+          description: Pong response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "pong"
+                  version:
+                    type: string
+                    example: "v1.0.0"
+
+  /status:
+    get:
+      tags:
+        - Health
+      summary: API status
+      description: Returns general status information about the API
+      responses:
+        "200":
+          description: API status information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "operational"
+                  api_version:
+                    type: string
+                    example: "v1.0.0"
+                  timestamp:
+                    $ref: "#/components/schemas/Timestamp"
+
+  # Authentication Endpoints
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Create a new user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and get access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Get a new access token using refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidate user session
+      security:
+        - Bearer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user profile
+      description: Get the authenticated user's profile information
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/UserResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/change-password:
+    put:
+      tags:
+        - Authentication
+      summary: Change user password
+      description: Change the authenticated user's password
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized or incorrect current password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # Event Endpoints
+  /events:
+    get:
+      tags:
+        - Events
+      summary: Get all events
+      description: Retrieve all published events with optional pagination and filtering
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Number of events to return
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of events to skip
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: ["DRAFT", "PUBLISHED", "CANCELLED", "COMPLETED"]
+          description: Filter by event status
+        - in: query
+          name: tag_id
+          schema:
+            $ref: "#/components/schemas/UUID"
+          description: Filter by tag ID
+      responses:
+        "200":
+          description: Events retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          events:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Event"
+                          total:
+                            type: integer
+                          limit:
+                            type: integer
+                          offset:
+                            type: integer
+
+  /events/upcoming:
+    get:
+      tags:
+        - Events
+      summary: Get upcoming events
+      description: Retrieve all upcoming published events
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        "200":
+          description: Upcoming events retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Event"
+
+  /events/{eventId}:
+    get:
+      tags:
+        - Events
+      summary: Get event by ID
+      description: Retrieve a specific event by its ID
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+          description: Event ID
+      responses:
+        "200":
+          description: Event retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Event"
+        "404":
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /events/{eventId}/sections:
+    get:
+      tags:
+        - Events
+      summary: Get event sections
+      description: Get all sections for a specific event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Event sections retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Section"
+
+  /events/{eventId}/venue/layout:
+    get:
+      tags:
+        - Events
+      summary: Get event venue layout
+      description: Get the venue layout for a specific event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Venue layout retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          venue_template:
+                            $ref: "#/components/schemas/VenueTemplate"
+                          sections:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Section"
+
+  # Admin Event Endpoints
+  /admin/events:
+    post:
+      tags:
+        - Admin Events
+      summary: Create event (Admin)
+      description: Create a new event (Admin only)
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventRequest"
+      responses:
+        "201":
+          description: Event created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Event"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags:
+        - Admin Events
+      summary: Get all events (Admin)
+      description: Get all events including drafts (Admin only)
+      security:
+        - Bearer: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Events retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Event"
+
+  /admin/events/{eventId}:
+    get:
+      tags:
+        - Admin Events
+      summary: Get event by ID (Admin)
+      description: Get event details including admin-only fields
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Event retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Event"
+    put:
+      tags:
+        - Admin Events
+      summary: Update event (Admin)
+      description: Update an existing event (Admin only)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventRequest"
+      responses:
+        "200":
+          description: Event updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Event"
+        "404":
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+        - Admin Events
+      summary: Delete event (Admin)
+      description: Delete an event (Admin only)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Event deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/events/analytics:
+    get:
+      tags:
+        - Admin Events
+      summary: Get all events analytics (Admin)
+      description: Get analytics for all events (Admin only)
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/EventAnalytics"
+
+  /admin/events/{eventId}/analytics:
+    get:
+      tags:
+        - Admin Events
+      summary: Get event analytics (Admin)
+      description: Get detailed analytics for a specific event (Admin only)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Event analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/EventAnalytics"
+
+  # Analytics Endpoints
+  /analytics/admin/dashboard:
+    get:
+      tags:
+        - Analytics
+      summary: Get admin dashboard analytics
+      description: Get comprehensive dashboard analytics for administrators
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Dashboard analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  /analytics/admin/events:
+    get:
+      tags:
+        - Analytics
+      summary: Get global event analytics (Admin)
+      description: Get global analytics for all events
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Global event analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GlobalAnalytics"
+
+  /analytics/admin/events/{id}:
+    get:
+      tags:
+        - Analytics
+      summary: Get specific event analytics (Admin)
+      description: Get detailed analytics for a specific event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Event analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/EventAnalytics"
+
+  /analytics/admin/tags:
+    get:
+      tags:
+        - Analytics
+      summary: Get tag analytics (Admin)
+      description: Get analytics for tags usage and performance
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Tag analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  /analytics/admin/tags/popularity:
+    get:
+      tags:
+        - Analytics
+      summary: Get tag popularity analytics (Admin)
+      description: Get popularity metrics for tags
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Tag popularity analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  /analytics/admin/tags/trends:
+    get:
+      tags:
+        - Analytics
+      summary: Get tag trends (Admin)
+      description: Get trending analysis for tags
+      security:
+        - Bearer: []
+      parameters:
+        - in: query
+          name: months
+          schema:
+            type: integer
+            default: 6
+          description: Number of months for trend analysis
+      responses:
+        "200":
+          description: Tag trends retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  /analytics/admin/tags/comparisons:
+    get:
+      tags:
+        - Analytics
+      summary: Get tag performance comparisons (Admin)
+      description: Compare performance metrics across different tags
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Tag comparisons retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  /analytics/admin/bookings:
+    get:
+      tags:
+        - Analytics
+      summary: Get booking analytics (Admin)
+      description: Get comprehensive booking analytics
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Booking analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  /analytics/admin/bookings/daily:
+    get:
+      tags:
+        - Analytics
+      summary: Get daily booking statistics (Admin)
+      description: Get daily booking statistics and trends
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Daily booking statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DailyBooking"
+
+  /analytics/admin/bookings/cancellations:
+    get:
+      tags:
+        - Analytics
+      summary: Get cancellation analytics (Admin)
+      description: Get analytics for booking cancellations
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Cancellation analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  /analytics/admin/users:
+    get:
+      tags:
+        - Analytics
+      summary: Get user analytics (Admin)
+      description: Get user behavior analytics
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: User analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  /analytics/user/bookings/history:
+    get:
+      tags:
+        - Analytics
+      summary: Get user booking history analytics
+      description: Get analytics for the current user's booking history
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: User booking history retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  /analytics/user/personal:
+    get:
+      tags:
+        - Analytics
+      summary: Get personal analytics
+      description: Get personal analytics and insights for the current user
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Personal analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+
+  # Seat Management Endpoints
+
+  /seats/hold:
+    post:
+      tags:
+        - Seats
+      summary: Hold seats
+      description: Temporarily hold seats for booking
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HoldSeatsRequest"
+      responses:
+        "200":
+          description: Seats held successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SeatHoldResponse"
+        "400":
+          description: Invalid request or seats unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Some seats are already held or booked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /seats/hold/{holdId}:
+    get:
+      tags:
+        - Seats
+      summary: Get hold details
+      description: Get details of a seat hold
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: holdId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Hold details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SeatHoldResponse"
+    delete:
+      tags:
+        - Seats
+      summary: Release seat hold
+      description: Release a previously held set of seats
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: holdId
+          required: true
+          schema:
+            type: string
+          description: Hold ID
+      responses:
+        "200":
+          description: Hold released successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Hold not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /seats/{id}:
+    get:
+      tags:
+        - Seats
+      summary: Get individual seat details
+      description: Get details of a specific seat
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Seat details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Seat"
+
+  /seats/hold/{holdId}/validate:
+    get:
+      tags:
+        - Seats
+      summary: Validate seat hold
+      description: Validate if a seat hold is still active and valid
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: holdId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Hold validation result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          valid:
+                            type: boolean
+                          reason:
+                            type: string
+                          ttl_seconds:
+                            type: integer
+
+  /seats/availability:
+    post:
+      tags:
+        - Seats
+      summary: Check seat availability
+      description: Check availability status for multiple seats
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - event_id
+                - seat_ids
+              properties:
+                event_id:
+                  $ref: "#/components/schemas/UUID"
+                seat_ids:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Seat availability check completed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            seat_id:
+                              $ref: "#/components/schemas/UUID"
+                            available:
+                              type: boolean
+                            status:
+                              type: string
+
+  /admin/seats/{id}:
+    put:
+      tags:
+        - Admin Seats
+      summary: Update seat (Admin)
+      description: Update seat details (Admin only)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                seat_number:
+                  type: string
+                row:
+                  type: string
+                position:
+                  type: integer
+                status:
+                  type: string
+                  enum: ["AVAILABLE", "BLOCKED"]
+      responses:
+        "200":
+          description: Seat updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Seat"
+
+    delete:
+      tags:
+        - Admin Seats
+      summary: Delete seat (Admin)
+      description: Delete a seat (Admin only)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Seat deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /sections/{sectionId}/seats:
+    get:
+      tags:
+        - Seats
+      summary: Get seats in section
+      description: Get all seats in a specific section
+      parameters:
+        - in: path
+          name: sectionId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - in: query
+          name: event_id
+          required: false
+          schema:
+            $ref: "#/components/schemas/UUID"
+          description: Event ID to get event-specific seat data
+      responses:
+        "200":
+          description: Seats retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Seat"
+
+  /sections/{sectionId}/seats/available:
+    get:
+      tags:
+        - Seats
+      summary: Get available seats in section
+      description: Get all available seats in a specific section for an event
+      parameters:
+        - in: path
+          name: sectionId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+        - in: query
+          name: event_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+          description: Event ID to check availability for
+      responses:
+        "200":
+          description: Available seats retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Seat"
+
+  /users/{userId}/holds:
+    get:
+      tags:
+        - Seats
+      summary: Get user holds
+      description: Get all current holds for a specific user
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: User holds retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SeatHoldResponse"
+
+  # Booking Endpoints
+  /bookings/confirm:
+    post:
+      tags:
+        - Bookings
+      summary: Confirm booking
+      description: Confirm a booking from held seats
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingConfirmationRequest"
+      responses:
+        "201":
+          description: Booking confirmed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Booking"
+        "400":
+          description: Invalid hold ID or hold expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /bookings/{id}:
+    get:
+      tags:
+        - Bookings
+      summary: Get booking by ID
+      description: Get details of a specific booking
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Booking retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Booking"
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /bookings/{id}/cancel:
+    post:
+      tags:
+        - Bookings
+      summary: Cancel booking
+      description: Cancel a confirmed booking
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Booking cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Booking cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/bookings:
+    get:
+      tags:
+        - Bookings
+      summary: Get user bookings
+      description: Get all bookings for the authenticated user
+      security:
+        - Bearer: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: ["CONFIRMED", "CANCELLED", "REFUNDED"]
+      responses:
+        "200":
+          description: User bookings retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Booking"
+
+  # Waitlist Endpoints
+  /waitlist/join:
+    post:
+      tags:
+        - Waitlist
+      summary: Join event waitlist
+      description: Join the waitlist for a sold-out event
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinWaitlistRequest"
+      responses:
+        "201":
+          description: Successfully joined waitlist
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/WaitlistEntry"
+        "400":
+          description: Event has available seats or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /waitlist/{id}/cancel:
+    post:
+      tags:
+        - Waitlist
+      summary: Cancel waitlist entry
+      description: Cancel a waitlist entry
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Waitlist entry cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /users/waitlist:
+    get:
+      tags:
+        - Waitlist
+      summary: Get user waitlist entries
+      description: Get all waitlist entries for the authenticated user
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: User waitlist entries retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/WaitlistEntry"
+
+  /waitlist:
+    post:
+      tags:
+        - Waitlist
+      summary: Join waitlist
+      description: Join the waitlist for an event
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinWaitlistRequest"
+      responses:
+        "201":
+          description: Successfully joined waitlist
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/WaitlistEntry"
+
+  /waitlist/{event_id}:
+    delete:
+      tags:
+        - Waitlist
+      summary: Leave waitlist
+      description: Leave the waitlist for a specific event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: event_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Successfully left waitlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /waitlist/status/{event_id}:
+    get:
+      tags:
+        - Waitlist
+      summary: Get waitlist status
+      description: Get waitlist status for a specific event and current user
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: event_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Waitlist status retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/WaitlistEntry"
+
+  /admin/waitlist/stats/{event_id}:
+    get:
+      tags:
+        - Admin Waitlist
+      summary: Get waitlist statistics (Admin)
+      description: Get waitlist statistics for a specific event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: event_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Waitlist statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          total_entries:
+                            type: integer
+                          active_entries:
+                            type: integer
+                          converted_entries:
+                            type: integer
+                          average_wait_time:
+                            type: integer
+
+  /admin/waitlist/entries/{event_id}:
+    get:
+      tags:
+        - Admin Waitlist
+      summary: Get waitlist entries (Admin)
+      description: Get all waitlist entries for a specific event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: event_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Waitlist entries retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/WaitlistEntry"
+
+  /admin/waitlist/notify/{event_id}:
+    post:
+      tags:
+        - Admin Waitlist
+      summary: Notify next in line (Admin)
+      description: Manually notify the next person in waitlist for an event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: event_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Notification sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/waitlist/cancellation/{event_id}:
+    post:
+      tags:
+        - Admin Waitlist
+      summary: Process cancellation (Admin)
+      description: Process waitlist notifications after booking cancellations
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: event_id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                freed_tickets:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Cancellation processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # Cancellation Policy and Request Endpoints
+  /admin/events/{eventId}/cancellation-policy:
+    post:
+      tags:
+        - Admin Cancellation
+      summary: Create cancellation policy (Admin)
+      description: Create a cancellation policy for an event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cancellation_deadline_hours:
+                  type: integer
+                  description: Hours before event when cancellation is no longer allowed
+                refund_percentage:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 100
+                  description: Percentage of refund offered
+      responses:
+        "201":
+          description: Cancellation policy created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+    get:
+      tags:
+        - Admin Cancellation
+      summary: Get cancellation policy (Admin)
+      description: Get the cancellation policy for an event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Cancellation policy retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          event_id:
+                            $ref: "#/components/schemas/UUID"
+                          cancellation_deadline_hours:
+                            type: integer
+                          refund_percentage:
+                            type: number
+
+    put:
+      tags:
+        - Admin Cancellation
+      summary: Update cancellation policy (Admin)
+      description: Update the cancellation policy for an event
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cancellation_deadline_hours:
+                  type: integer
+                refund_percentage:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 100
+      responses:
+        "200":
+          description: Cancellation policy updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /bookings/{id}/request-cancel:
+    post:
+      tags:
+        - Cancellation
+      summary: Request booking cancellation
+      description: Request cancellation for a booking
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Reason for cancellation request
+      responses:
+        "200":
+          description: Cancellation request submitted successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          cancellation_id:
+                            $ref: "#/components/schemas/UUID"
+                          status:
+                            type: string
+                          refund_amount:
+                            type: number
+
+  /cancellations/{id}:
+    get:
+      tags:
+        - Cancellation
+      summary: Get cancellation details
+      description: Get details of a specific cancellation request
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Cancellation details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            $ref: "#/components/schemas/UUID"
+                          booking_id:
+                            $ref: "#/components/schemas/UUID"
+                          status:
+                            type: string
+                          reason:
+                            type: string
+                          refund_amount:
+                            type: number
+                          processed_at:
+                            $ref: "#/components/schemas/Timestamp"
+
+  /users/cancellations:
+    get:
+      tags:
+        - Cancellation
+      summary: Get user cancellations
+      description: Get all cancellation requests for the authenticated user
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: User cancellations retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              $ref: "#/components/schemas/UUID"
+                            booking_id:
+                              $ref: "#/components/schemas/UUID"
+                            status:
+                              type: string
+                            refund_amount:
+                              type: number
+                            created_at:
+                              $ref: "#/components/schemas/Timestamp"
+
+  # Tag Endpoints
+  /tags/active:
+    get:
+      tags:
+        - Tags
+      summary: Get active tags
+      description: Retrieve all active tags for filtering
+      responses:
+        "200":
+          description: Active tags retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Tag"
+
+  /tags/slug/{slug}:
+    get:
+      tags:
+        - Tags
+      summary: Get tag by slug
+      description: Retrieve a tag by its slug identifier
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+          description: Tag slug
+      responses:
+        "200":
+          description: Tag retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Tag"
+
+  /admin/tags:
+    post:
+      tags:
+        - Admin Tags
+      summary: Create tag (Admin)
+      description: Create a new tag (Admin only)
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTagRequest"
+      responses:
+        "201":
+          description: Tag created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Tag"
+    get:
+      tags:
+        - Admin Tags
+      summary: Get all tags (Admin)
+      description: Get all tags with admin filters and options
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Tags retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Tag"
+
+  /admin/tags/{id}:
+    get:
+      tags:
+        - Admin Tags
+      summary: Get tag by ID (Admin)
+      description: Get a specific tag by ID
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Tag retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Tag"
+
+    put:
+      tags:
+        - Admin Tags
+      summary: Update tag (Admin)
+      description: Update an existing tag (Admin only)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTagRequest"
+      responses:
+        "200":
+          description: Tag updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Tag"
+
+    delete:
+      tags:
+        - Admin Tags
+      summary: Delete tag (Admin)
+      description: Delete a tag (Admin only)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Tag deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/tags/active:
+    get:
+      tags:
+        - Admin Tags
+      summary: Get active tags (Admin)
+      description: Get all active tags (admin view)
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Active tags retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Tag"
+
+  # Admin Venue Template Endpoints
+  /admin/venue-templates:
+    post:
+      tags:
+        - Admin Venues
+      summary: Create venue template (Admin)
+      description: Create a new venue template (Admin only)
+      security:
+        - Bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - description
+                - layout_type
+              properties:
+                name:
+                  type: string
+                  example: "Madison Square Garden"
+                description:
+                  type: string
+                  example: "Famous indoor arena"
+                layout_type:
+                  type: string
+                  enum: ["THEATER", "STADIUM", "CONFERENCE", "OUTDOOR"]
+      responses:
+        "201":
+          description: Venue template created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/VenueTemplate"
+
+    get:
+      tags:
+        - Admin Venues
+      summary: Get venue templates (Admin)
+      description: Get all venue templates (Admin only)
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Venue templates retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/VenueTemplate"
+
+  /admin/venue-templates/{id}:
+    get:
+      tags:
+        - Admin Venues
+      summary: Get venue template by ID (Admin)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Venue template retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/VenueTemplate"
+
+    put:
+      tags:
+        - Admin Venues
+      summary: Update venue template (Admin)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Venue template updated successfully
+
+    delete:
+      tags:
+        - Admin Venues
+      summary: Delete venue template (Admin)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Venue template deleted successfully
+
+  /admin/venue-templates/{id}/sections:
+    post:
+      tags:
+        - Admin Venues
+      summary: Create venue section (Admin)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "201":
+          description: Section created successfully
+
+    get:
+      tags:
+        - Admin Venues
+      summary: Get venue sections (Admin)
+      security:
+        - Bearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Sections retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Section"
+
+tags:
+  - name: Health
+    description: Health check and status endpoints
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Events
+    description: Public event browsing and discovery
+  - name: Admin Events
+    description: Event management (Admin only)
+  - name: Seats
+    description: Seat management and booking
+  - name: Admin Seats
+    description: Seat administration (Admin only)
+  - name: Bookings
+    description: Booking management and operations
+  - name: Waitlist
+    description: Waitlist management for sold-out events
+  - name: Admin Waitlist
+    description: Waitlist administration (Admin only)
+  - name: Tags
+    description: Tag management for event categorization
+  - name: Admin Tags
+    description: Tag administration (Admin only)
+  - name: Admin Venues
+    description: Venue template management (Admin only)
+  - name: Analytics
+    description: Analytics and reporting endpoints
+  - name: Cancellation
+    description: Booking cancellation management
+  - name: Admin Cancellation
+    description: Cancellation policy management (Admin only)

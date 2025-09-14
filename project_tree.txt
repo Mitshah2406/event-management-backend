@@ -4,11 +4,10 @@
 │   │   └── routes
 │   │       └── router.go
 │   ├── bin
-│   │   ├── server
-│   │   └── test-build
-│   ├── cache_test_standalone.go
 │   ├── cmd
-│   │   └── cache_test
+│   │   ├── emailtest
+│   │   │   └── main.go
+│   │   └── seed
 │   │       └── main.go
 │   ├── deployments
 │   │   └── docker
@@ -19,7 +18,6 @@
 │   │       └── init.sql
 │   ├── docs
 │   │   └── swagger.yaml
-│   ├── emailtest.txt
 │   ├── go.mod
 │   ├── go.sum
 │   ├── internal
@@ -121,7 +119,6 @@
 │   │       ├── response-dto.go
 │   │       ├── router.go
 │   │       └── service.go
-│   ├── main
 │   ├── Makefile
 │   ├── pkg
 │   │   ├── cache
@@ -132,17 +129,16 @@
 │   │   └── ratelimit
 │   │       ├── middleware.go
 │   │       └── rate_limiter.go
-│   ├── project_tree.txt
 │   ├── server
 │   │   └── main.go
-│   ├── test1.go.txt
 │   └── tmp
 │       ├── build-errors.log
 │       ├── main
 │       └── server
+├── ER Diagram.png
 ├── Evently - Challenge.pdf
-├── Evently - Complete API Collection.postman_collection.json
 ├── Evently-Task.txt
-└── project_tree.txt
+├── project_tree.txt
+└── SEED_SUMMARY.md
 
-35 directories, 111 files
+36 directories, 106 files

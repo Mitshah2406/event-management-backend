@@ -72,9 +72,6 @@ backup_*.sql
 *.pprof
 trace.out
 
-# Documentation generated files
-docs/swagger.json
-docs/swagger.yaml
 
 # Upload directories
 uploads/

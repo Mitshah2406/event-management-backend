@@ -10,14 +10,12 @@ type WaitlistServiceAdapter struct {
 	unifiedService NotificationService
 }
 
-// NewWaitlistServiceAdapter creates a new adapter for waitlist notifications
 func NewWaitlistServiceAdapter(unifiedService NotificationService) *WaitlistServiceAdapter {
 	return &WaitlistServiceAdapter{
 		unifiedService: unifiedService,
 	}
 }
 
-// SendWaitlistNotification implements the waitlist.NotificationService interface
 func (w *WaitlistServiceAdapter) SendWaitlistNotification(ctx context.Context, userID uuid.UUID, email, name string,
 	eventID, waitlistEntryID uuid.UUID, notificationType string,
 	templateData map[string]interface{}) error {

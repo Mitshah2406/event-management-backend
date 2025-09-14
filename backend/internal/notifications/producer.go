@@ -85,7 +85,6 @@ func NewKafkaNotificationProducer(config *KafkaProducerConfig) (NotificationProd
 	return kafkaProducer, nil
 }
 
-// PublishNotification publishes a single notification to Kafka
 func (knp *KafkaNotificationProducer) PublishNotification(ctx context.Context, notification *UnifiedNotification) error {
 	notification.Status = NotificationStatusQueued
 	notification.UpdatedAt = time.Now()
@@ -117,7 +116,6 @@ func (knp *KafkaNotificationProducer) PublishNotification(ctx context.Context, n
 	return nil
 }
 
-// PublishBatchNotifications publishes multiple notifications in batch for efficiency
 func (knp *KafkaNotificationProducer) PublishBatchNotifications(ctx context.Context, notifications []*UnifiedNotification) error {
 	if len(notifications) == 0 {
 		return nil
@@ -219,7 +217,6 @@ func (knp *KafkaNotificationProducer) formatChannels(channels []NotificationChan
 	return result
 }
 
-// Close closes the Kafka producer
 func (knp *KafkaNotificationProducer) Close() error {
 	if knp.producer != nil {
 		err := knp.producer.Close()
@@ -231,7 +228,7 @@ func (knp *KafkaNotificationProducer) Close() error {
 	return nil
 }
 
-// HealthCheck performs a health check on the Kafka producer
+// HealthCheck performs a health check on the Kafka producerz
 func (knp *KafkaNotificationProducer) HealthCheck(ctx context.Context) error {
 	// Create a test notification
 	testNotification := NewNotificationBuilder().

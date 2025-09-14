@@ -257,10 +257,16 @@ func (s *SMTPEmailService) generateContent(notification *UnifiedNotification) (s
 	return s.generateDefaultContent(notification)
 }
 
-// generateDefaultContent creates default email content for notification types
 func (s *SMTPEmailService) generateDefaultContent(notification *UnifiedNotification) (string, string, error) {
 	data := notification.TemplateData
-
+	expiresAtStr, ok := data["expires_at"].(string)
+	if !ok {
+		return "", "", fmt.Errorf("expires_at is not a string")
+	}
+	formattedDate, err := time.Parse("2006-01-02T15:04:05.999999-07:00", expiresAtStr)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse expires_at: %w", err)
+	}
 	switch notification.Type {
 	case NotificationTypeWaitlistSpotAvailable:
 		htmlBody := fmt.Sprintf(`
@@ -268,20 +274,20 @@ func (s *SMTPEmailService) generateDefaultContent(notification *UnifiedNotificat
 			<p>Hi %s,</p>
 			<p>A spot has become available for <strong>%s</strong>.</p>
 			<p>You have until <strong>%v</strong> to secure your booking.</p>
-			<p>Your position was #%v.</p>
+			<p>Your position in the waitlist queue was #%v.</p>
 			<p>Best regards,<br>Evently Team</p>
 		`,
 			notification.RecipientName,
 			data["event_title"],
-			data["expires_at"],
+			formattedDate,
 			data["position"],
 		)
 
 		textBody := fmt.Sprintf(
-			"Hi %s,\n\nA spot has become available for %s.\nYou have until %v to secure your booking.\nYour position was #%v.\n\nBest regards,\nEvently Team",
+			"Hi %s,\n\nA spot has become available for %s.\nYou have until %v to secure your booking.\nYour position in the waitlist queue was #%v.\n\nBest regards,\nEvently Team",
 			notification.RecipientName,
 			data["event_title"],
-			data["expires_at"],
+			formattedDate,
 			data["position"],
 		)
 
