@@ -1,22 +1,21 @@
-# 🎪 Evently - Event Management Backend System
+# 🎪 Event Management Backend System
 
 [![Go Version](https://img.shields.io/badge/Go-1.25.1-blue.svg)](https://golang.org/)
 [![Live Demo](https://img.shields.io/badge/Live-Demo-green.svg)](https://evently-api.mitshah.dev/)
 [![API Docs](https://img.shields.io/badge/API-Docs-orange.svg)](https://evently-api.mitshah.dev/docs)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > A scalable, high-performance backend system for event management and ticket booking that handles concurrency, prevents overselling, and provides comprehensive analytics.
 
 ## 🌟 Overview
 
-Evently is a robust backend system designed to handle large-scale event bookings with thousands of concurrent users. Built with **Go**, **PostgreSQL**, **Redis**, and **Apache Kafka**, it provides a complete solution for event organizers and attendees.
+It is a robust backend system designed to handle large-scale event bookings with thousands of concurrent users. Built with **Go**, **PostgreSQL**, **Redis**, and **Apache Kafka**, it provides a complete solution for event organizers and attendees.
 
 **🔗 Quick Links:**
 
 - 🌍 **Live API**: [https://evently-api.mitshah.dev/](https://evently-api.mitshah.dev/)
 - 📖 **API Documentation**: [https://evently-api.mitshah.dev/docs](https://evently-api.mitshah.dev/docs)
 - 🐙 **GitHub Repository**: [https://github.com/Mitshah2406/event-management-backend](https://github.com/Mitshah2406/event-management-backend)
-- 📝 **Postman Collection**: _[Coming Soon]_
+- 📝 **Postman Collection**: [Complete_API_Collection.postman_collection.json](Complete_API_Collection.postman_collection.json)
 - 🎥 **Video Demo**: _[Coming Soon]_
 
 ---
@@ -83,35 +82,87 @@ The system follows a **microservices architecture** with clear separation of con
 ### Booking Success Flow
 
 ![Booking Success Flow](./Booking%20Success%20Flow.png)
+**Overview:**  
+This flow handles the complete lifecycle of a successful booking from seat discovery to confirmation, ensuring **data consistency**, **atomic updates**, and **real-time notifications**.
 
-**Process:**
+**Step-by-Step Process:**
 
-1. **Seat Discovery**: User browses available seats by section
-2. **Seat Hold**: Temporary reservation with 10-minute expiry
-3. **Booking Confirmation**: Atomic transaction with inventory update
-4. **Waitlist Processing**: Automatic notification for waiting users
+1. **Seat Discovery**
+
+   - User browses available seats categorized by section, type, and pricing.
+   - Real-time availability ensures only free seats are shown.
+
+2. **Seat Hold**
+
+   - Temporary reservation of selected seats with a **10-minute expiry**.
+   - Uses **optimistic locking** to prevent double-booking in concurrent scenarios.
+   - Provides a buffer for users to confirm before the hold expires.
+
+3. **Booking Confirmation**
+
+   - Performs an **atomic transaction**: updates seat inventory, confirms payment(mock), and records the booking.
+   - Ensures **consistency** across multiple services (Seat, Booking, Analytics).
+   - Prevents race conditions even under high concurrency.
+
+4. **Waitlist Processing**
+   - Automatic notifications sent to waitlisted users if seats become available.
+   - Queue position tracked with **optimistic updates** to maintain fairness (FIFO).
 
 ### Cancellation Flow
 
 ![Cancellation Flow](./Cancellation%20Flow.png)
 
-**Process:**
+**Overview:**  
+This flow ensures safe handling of cancellations, refunds, and inventory updates, maintaining **atomicity** and notifying affected users.
 
-1. **Policy Check**: Validate against event-specific cancellation rules
-2. **Refund Calculation**: Apply fees based on timing and policy type
-3. **Inventory Release**: Free up seats for other users
-4. **Waitlist Notification**: Alert next users in queue
+**Step-by-Step Process:**
+
+1. **Policy Check**
+
+   - Validates cancellation request against event-specific rules.
+   - Handles partial refunds, fixed fees, or non-refundable tickets.
+
+2. **Refund Calculation**
+
+   - Computes refund amounts based on timing and policy.
+   - Integrates with payment gateways(Mock) for **atomic refund transactions**.
+
+3. **Inventory Release**
+
+   - Frees up cancelled seats using **atomic updates** in the seat inventory.
+   - Ensures newly available seats are visible for other users.
+   - Uses **optimistic locking** to avoid conflicts with ongoing bookings.
+
+4. **Waitlist Notification**
+   - Alerts next eligible users in the waitlist queue.
+   - Waitlist promotions also follow **atomic state changes** to maintain FIFO order.
 
 ### Waitlist Queue Logic
 
 ![Waitlist Queue Logic](./Waitlist%20Queue%20Logic%20Flow.png)
 
-**Queue Management:**
+**Overview:**  
+The waitlist system manages users efficiently, promoting them when seats become available while maintaining **data integrity** and **fairness**.
 
-- **FIFO Processing**: First-in, first-out notification system
-- **Smart Expiry**: Automatic cleanup of expired notifications
-- **Batch Processing**: Efficient handling of multiple cancellations
-- **Real-time Updates**: Live status tracking for users
+**Key Features & Logic:**
+
+- **FIFO Processing**
+
+  - Users notified in the order they joined the queue in batches.
+
+- **Smart Expiry**
+
+  - Automatically removes expired or unresponsive users.
+  - Maintains an accurate and clean waitlist state.
+
+- **Batch Processing**
+
+  - Handles multiple cancellations and promotions in bulk.
+  - All updates happen via **atomic transactions** to ensure consistency.
+
+- **Real-time Updates**
+  - Users receive live status updates on their queue position.
+  - Prevents conflicts or double-bookings even during high-demand events.
 
 ---
 
@@ -269,7 +320,7 @@ curl -X POST https://evently-api.mitshah.dev/api/v1/bookings/confirm \
 
 - **Go 1.25.1+**
 - **Docker & Docker Compose**
-- **Make** (optional, for using Makefile commands)
+- **Make**
 
 ### Development Setup
 
@@ -335,25 +386,6 @@ make dev
 
 # Or run without live reload
 make run
-```
-
-#### 4️⃣ Manual Setup (Alternative)
-
-```bash
-# Install dependencies
-go mod tidy
-
-# Start infrastructure services
-docker-compose -f ./deployments/docker/docker-compose.dev.yml up -d
-
-# Run database migrations
-go run cmd/migrate/main.go
-
-# Seed sample data
-make seed
-
-# Start the server
-go run server/main.go
 ```
 
 #### 5️⃣ Verify Setup
@@ -438,53 +470,6 @@ After starting, services are available at:
 
 Our production deployment uses **Docker Compose** on a **Hostinger VPS**:
 
-#### Server Requirements
-
-- **OS**: Ubuntu 20.04+
-- **RAM**: 4GB minimum (8GB recommended)
-- **Storage**: 50GB SSD
-- **CPU**: 2 vCPUs minimum
-
-#### Deployment Steps
-
-```bash
-# 1. Clone repository on server
-git clone https://github.com/Mitshah2406/event-management-backend.git
-cd evently-backend/backend
-
-# 2. Configure production environment
-cp .env.example .env
-# Edit .env with production values
-
-# 3. Build and start services
-make prod-up
-
-# 4. Set up reverse proxy (Nginx)
-sudo nano /etc/nginx/sites-available/evently-api
-
-# 5. SSL setup with Let's Encrypt
-sudo certbot --nginx -d evently-api.mitshah.dev
-```
-
-**Nginx Configuration:**
-
-```nginx
-server {
-    listen 80;
-    server_name evently-api.mitshah.dev;
-
-    location / {
-        proxy_pass http://localhost:9000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
----
-
 ## 🛠️ Development Commands
 
 ### Makefile Commands
@@ -515,24 +500,6 @@ make prod-logs    # View all logs
 # Database Connections
 make prod-connect-db     # Connect to PostgreSQL
 make prod-connect-redis  # Connect to Redis
-```
-
-### Direct Go Commands
-
-```bash
-# Run specific components
-go run server/main.go                    # Start main server
-go run cmd/seed/main.go                  # Seed database
-go run cmd/migrate/main.go               # Run migrations
-go run cmd/emailtest/main.go             # Test email service
-
-# Testing
-go test ./...                            # Run all tests
-go test -v ./internal/bookings/...       # Test specific module
-go test -cover ./...                     # Run with coverage
-
-# Building
-go build -o bin/server server/main.go    # Build production binary
 ```
 
 ---
@@ -627,49 +594,6 @@ make prod-redis-info
 
 ---
 
-## 🧪 Testing
-
-### Running Tests
-
-```bash
-# All tests
-go test ./...
-
-# Specific package
-go test ./internal/bookings/
-
-# With coverage
-go test -cover ./...
-
-# Verbose output
-go test -v ./...
-
-# Benchmark tests
-go test -bench=. ./...
-```
-
-### Test Categories
-
-- **Unit Tests**: Individual function testing
-- **Integration Tests**: Database and service integration
-- **API Tests**: Endpoint testing with test database
-- **Load Tests**: Concurrent booking simulation
-
-### Sample Test Commands
-
-```bash
-# Test booking concurrency
-go test ./internal/bookings/ -run TestConcurrentBooking
-
-# Test seat holding logic
-go test ./internal/seats/ -run TestSeatHold
-
-# Test waitlist processing
-go test ./internal/waitlist/ -run TestWaitlistQueue
-```
-
----
-
 ## 🚀 Performance & Scalability
 
 ### Concurrency Handling
@@ -684,17 +608,6 @@ go test ./internal/waitlist/ -run TestWaitlistQueue
 - **Redis Cache**: Event data, user sessions, seat availability
 - **Cache Invalidation**: Smart cache updates on data changes
 - **TTL Management**: Automatic cleanup of expired data
-
-### Load Testing Results
-
-```bash
-# Concurrent booking test (1000 users, same event)
-Artillery Quick Run: 1000 virtual users over 60s
-- Average Response Time: 45ms
-- Success Rate: 99.8%
-- Peak RPS: 850
-- Zero overselling incidents
-```
 
 ### Scalability Features
 
@@ -728,7 +641,6 @@ Artillery Quick Run: 1000 virtual users over 60s
 - **HTTPS/TLS**: SSL certificate with Let's Encrypt
 - **Environment Variables**: Secure configuration management
 - **Database Connections**: SSL-enabled connections
-- **API Keys**: Secure external service integration
 
 ---
 
@@ -801,49 +713,13 @@ evently-backend/
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions! Please follow these guidelines:
-
-### Development Workflow
-
-1. **Fork** the repository
-2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
-3. **Make** your changes with tests
-4. **Run** tests: `make test`
-5. **Commit** changes: `git commit -m 'Add amazing feature'`
-6. **Push** to branch: `git push origin feature/amazing-feature`
-7. **Create** a Pull Request
-
-### Code Standards
-
-- **Go Formatting**: Use `gofmt` and `golint`
-- **Testing**: Minimum 80% test coverage
-- **Documentation**: Update README for new features
-- **API Changes**: Update OpenAPI specification
-- **Commits**: Use conventional commit messages
-
-### Issues & Bug Reports
-
-- Use GitHub Issues for bug reports
-- Include reproduction steps and environment details
-- Label issues appropriately (bug, feature, enhancement)
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
----
-
 ## 👨‍💻 Author & Contact
 
 **Mit Shah**
 
 - 🐙 **GitHub**: [@Mitshah2406](https://github.com/Mitshah2406)
 - 📧 **Email**: mitshah2406.work@gmail.com
-- 🌐 **Portfolio**: [mitshah.dev](https://mitshah.dev) _(Coming Soon)_
+- 🌐 **Portfolio**: [mitshah.dev](https://mitshah.dev)
 
 ---
 
@@ -853,9 +729,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 - [ ] **Multi-tenant Architecture**: Support multiple event organizers
 - [ ] **Payment Gateway**: Stripe/Razorpay integration
-- [ ] **Mobile Apps**: React Native applications
 - [ ] **Real-time Updates**: WebSocket for live seat availability
-- [ ] **Advanced Analytics**: ML-based demand forecasting
 - [ ] **Social Features**: User reviews and event sharing
 - [ ] **Loyalty Program**: Points and rewards system
 
@@ -863,21 +737,10 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 - [ ] **Microservices**: Break into smaller, independent services
 - [ ] **Kubernetes**: Container orchestration for scaling
-- [ ] **GraphQL**: Alternative API for flexible queries
 - [ ] **Event Sourcing**: Complete audit trail for all operations
 - [ ] **CQRS Pattern**: Separate read/write models for better performance
 
 ---
-
-## 📊 System Statistics
-
-### Performance Metrics
-
-- **Response Time**: Average 45ms for booking operations
-- **Throughput**: 850+ requests per second sustained
-- **Concurrency**: 1000+ simultaneous users tested
-- **Availability**: 99.9% uptime target
-- **Data Consistency**: Zero overselling incidents in testing
 
 ### Technology Choices Rationale
 
@@ -902,21 +765,10 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 - [Redis Documentation](https://redis.io/documentation)
 - [Docker Documentation](https://docs.docker.com/)
 
-### Related Projects
-
-- [Event Frontend (React)](https://github.com/Mitshah2406/event-frontend) _(Coming Soon)_
-- [Mobile App (React Native)](https://github.com/Mitshah2406/event-mobile) _(Coming Soon)_
-- [Admin Dashboard](https://github.com/Mitshah2406/event-admin) _(Coming Soon)_
-
 ### API Testing
 
-- **Postman Collection**: _[Link Coming Soon]_
-- **Insomnia Collection**: Available on request
+- **Postman Collection**: [Complete_API_Collection.postman_collection.json](Complete_API_Collection.postman_collection.json)
 - **OpenAPI Spec**: [swagger.yaml](./backend/docs/swagger.yaml)
-
----
-
-**⭐ If this project helped you, please give it a star on GitHub! ⭐**
 
 ---
 
