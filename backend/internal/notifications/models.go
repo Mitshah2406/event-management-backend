@@ -19,14 +19,12 @@ const (
 	NotificationTypeWelcome          NotificationType = "WELCOME"
 )
 
-// NotificationChannel represents different delivery channels
 type NotificationChannel string
 
 const (
 	NotificationChannelEmail NotificationChannel = "EMAIL"
 )
 
-// NotificationPriority represents the priority level of notifications
 type NotificationPriority string
 
 const (
@@ -36,7 +34,6 @@ const (
 	NotificationPriorityCritical NotificationPriority = "CRITICAL"
 )
 
-// NotificationStatus represents the delivery status of a notification
 type NotificationStatus string
 
 const (
@@ -51,7 +48,6 @@ const (
 	NotificationStatusCancelled NotificationStatus = "CANCELLED"
 )
 
-// UnifiedNotification represents a notification message that can be sent through various channels
 type UnifiedNotification struct {
 	ID       uuid.UUID             `json:"id"`
 	Type     NotificationType      `json:"type"`

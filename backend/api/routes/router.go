@@ -28,18 +28,6 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// nullNotificationAdapter is a no-op notification service for development/testing
-type nullNotificationAdapter struct{}
-
-func (n *nullNotificationAdapter) SendWaitlistNotification(ctx context.Context, userID uuid.UUID, email, name string,
-	eventID, waitlistEntryID uuid.UUID, notificationType string,
-	templateData map[string]interface{}) error {
-	// No-op implementation for development
-	log.Printf("📧 [NULL] Would send %s notification to %s (%s) for event %s", notificationType, email, name, eventID)
-	return nil
-}
-
-// VenueServiceAdapter adapts venues.Service to events.VenueService interface
 type VenueServiceAdapter struct {
 	venueService venues.Service
 }
@@ -52,7 +40,6 @@ func (v *VenueServiceAdapter) GetSectionsByTemplateID(ctx context.Context, templ
 	return sections, nil
 }
 
-// Router holds all route dependencies
 type Router struct {
 	config                 *config.Config
 	db                     *database.DB
@@ -67,9 +54,8 @@ type Router struct {
 	cacheService           cache.Service            // For caching
 }
 
-// NewRouter creates a new router instance
 func NewRouter(cfg *config.Config, db *database.DB) *Router {
-	// Initialize cache service
+
 	cacheService := cache.NewService(db.GetRedis())
 
 	return &Router{
@@ -79,50 +65,43 @@ func NewRouter(cfg *config.Config, db *database.DB) *Router {
 	}
 }
 
-// SetupRoutes configures all application routes
 func (r *Router) SetupRoutes(engine *gin.Engine) {
-	// Health check and basic info endpoints
+
 	r.setupHealthRoutes(engine)
 
-	// Swagger documentation routes
+	// Redirect root path to health check
+	engine.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/health")
+	})
+
 	r.setupSwaggerRoutes(engine)
 
-	// API routes
 	api := engine.Group(r.config.GetAPIBasePath())
 	{
-		// Setup auth routes
+
 		r.setupAuthRoutes(api)
 
-		// Setup tag routes (must be before event routes for dependency injection)
 		r.setupTagRoutes(api)
 
-		// Setup venue routes (foundation for events)
 		r.setupVenueRoutes(api)
 
-		// Setup seat routes (seat management and holding)
 		r.setupSeatRoutes(api)
 
-		// Setup event routes
 		r.setupEventRoutes(api)
 
-		// Setup cancellation routes (must be before waitlist routes for dependency injection)
 		r.setupCancellationRoutes(api)
 
-		// Setup waitlist routes (must be before booking routes for dependency injection)
 		r.setupWaitlistRoutes(api)
 
-		// Setup booking routes
 		r.setupBookingRoutes(api)
 
-		// Setup analytics routes
 		r.setupAnalyticsRoutes(api)
 	}
 }
 
-// setupHealthRoutes sets up health check and system status routes
 func (r *Router) setupHealthRoutes(engine *gin.Engine) {
 	engine.GET("/health", func(c *gin.Context) {
-		// Perform health checks
+
 		if err := r.db.HealthCheckDB(c.Request.Context()); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status":    "unhealthy",
@@ -156,21 +135,18 @@ func (r *Router) setupHealthRoutes(engine *gin.Engine) {
 	})
 }
 
-// setupAuthRoutes configures authentication routes
 func (r *Router) setupAuthRoutes(rg *gin.RouterGroup) {
-	// Initialize auth dependencies
-	authRepo := auth.NewRepository(r.db.GetPostgreSQL()) // Use the correct method
+
+	authRepo := auth.NewRepository(r.db.GetPostgreSQL())
 	authService := auth.NewService(authRepo, r.config)
 	authController := auth.NewController(authService)
 	authRouter := auth.NewRouter(authController)
 
-	// Setup auth routes
 	authRouter.SetupRoutes(rg)
 }
 
-// setupTagRoutes configures tag management routes
 func (r *Router) setupTagRoutes(rg *gin.RouterGroup) {
-	// Initialize tag dependencies
+
 	tagRepo := tags.NewRepository(r.db.GetPostgreSQL())
 	tagService := tags.NewService(tagRepo)
 	tagController := tags.NewController(tagService)
@@ -178,11 +154,9 @@ func (r *Router) setupTagRoutes(rg *gin.RouterGroup) {
 	// Store tag service for dependency injection
 	r.tagService = tagService
 
-	// Setup tag routes
 	tags.SetupTagRoutes(rg, tagController)
 }
 
-// setupEventRoutes configures event management routes
 func (r *Router) setupEventRoutes(rg *gin.RouterGroup) {
 	// Initialize event dependencies
 	eventRepo := events.NewRepository(r.db.GetPostgreSQL())
@@ -209,11 +183,9 @@ func (r *Router) setupEventRoutes(rg *gin.RouterGroup) {
 
 	eventController := events.NewController(eventService)
 
-	// Setup event routes
 	events.SetupEventRoutes(rg, eventController)
 }
 
-// setupVenueRoutes configures venue management routes
 func (r *Router) setupVenueRoutes(rg *gin.RouterGroup) {
 	// Initialize venue dependencies
 	venueRepo := venues.NewRepository(r.db.GetPostgreSQL())
@@ -228,11 +200,9 @@ func (r *Router) setupVenueRoutes(rg *gin.RouterGroup) {
 	// Store venue service for dependency injection
 	r.venueService = venueService
 
-	// Setup venue routes
 	venues.SetupVenueRoutes(rg, venueController)
 }
 
-// setupSeatRoutes configures seat management and holding routes
 func (r *Router) setupSeatRoutes(rg *gin.RouterGroup) {
 	// Initialize seat dependencies with Redis support
 	seatRepo := seats.NewRepository(r.db.GetPostgreSQL(), r.db.GetRedis())
@@ -245,11 +215,9 @@ func (r *Router) setupSeatRoutes(rg *gin.RouterGroup) {
 
 	seatController := seats.NewController(seatService)
 
-	// Setup seat routes
 	seats.SetupSeatRoutes(rg, seatController)
 }
 
-// setupBookingRoutes configures booking management routes
 func (r *Router) setupBookingRoutes(rg *gin.RouterGroup) {
 	// Initialize booking dependencies
 	bookingRepo := bookings.NewRepository(r.db.GetPostgreSQL())
@@ -291,11 +259,9 @@ func (r *Router) setupBookingRoutes(rg *gin.RouterGroup) {
 		r.cancellationController = cancellation.NewController(r.cancellationService)
 	}
 
-	// Setup booking routes
 	bookings.SetupBookingRoutes(rg, bookingController)
 }
 
-// setupCancellationRoutes configures cancellation management routes
 func (r *Router) setupCancellationRoutes(rg *gin.RouterGroup) {
 	// Initialize cancellation dependencies
 	cancellationRepo := cancellation.NewRepository(r.db.GetPostgreSQL())
@@ -314,11 +280,9 @@ func (r *Router) setupCancellationRoutes(rg *gin.RouterGroup) {
 	r.cancellationService = cancellationService
 	r.cancellationController = cancellationController
 
-	// Setup cancellation routes with wrapper functions that use current controller
 	r.setupCancellationRoutesWithWrappers(rg)
 }
 
-// BookingServiceAdapter adapts bookings.Service to cancellation.BookingService interface
 type BookingServiceAdapter struct {
 	bookingService bookings.Service
 }
@@ -329,7 +293,6 @@ func (b *BookingServiceAdapter) GetBooking(ctx context.Context, bookingID uuid.U
 		return cancellation.BookingInfo{}, err
 	}
 
-	// Convert bookings.Booking to cancellation.BookingInfo
 	return cancellation.BookingInfo{
 		ID:         booking.ID,
 		UserID:     booking.UserID,
@@ -351,7 +314,6 @@ func (b *BookingServiceAdapter) CancelBookingWithVersion(ctx context.Context, bo
 	return b.bookingService.CancelBookingWithVersion(ctx, bookingID, expectedVersion)
 }
 
-// WaitlistServiceAdapter adapts waitlist.Service to cancellation.WaitlistService interface
 type WaitlistServiceAdapter struct {
 	waitlistService waitlist.Service
 }
@@ -360,7 +322,6 @@ func (w *WaitlistServiceAdapter) ProcessCancellation(ctx context.Context, eventI
 	return w.waitlistService.ProcessCancellation(ctx, eventID, freedTickets)
 }
 
-// SeatServiceAdapter adapts seats.Service to bookings.SeatService interface
 type SeatServiceAdapter struct {
 	seatService seats.Service
 }
@@ -371,10 +332,9 @@ func (s *SeatServiceAdapter) ValidateHold(ctx context.Context, holdID string, us
 		return nil, err
 	}
 
-	// Convert seats.HoldValidationResult to bookings.HoldValidationResult
 	var seats []bookings.SeatInfo
 	if result.Details != nil {
-		// Get seat info from hold details
+
 		seatInfos, _ := s.seatService.GetSeatsByHoldID(ctx, holdID)
 		for _, seatInfo := range seatInfos {
 			seats = append(seats, bookings.SeatInfo{
@@ -388,12 +348,11 @@ func (s *SeatServiceAdapter) ValidateHold(ctx context.Context, holdID string, us
 		}
 	}
 
-	// Create a simplified validation result
 	return &bookings.HoldValidationResult{
 		Valid:     result.Valid,
 		HoldID:    holdID,
 		UserID:    userID,
-		ExpiresAt: time.Now().Add(10 * time.Minute), // Default TTL
+		ExpiresAt: time.Now().Add(10 * time.Minute),
 		Seats:     seats,
 	}, nil
 }
@@ -408,7 +367,6 @@ func (s *SeatServiceAdapter) GetSeatsByHoldID(ctx context.Context, holdID string
 		return nil, err
 	}
 
-	// Convert []seats.SeatInfo to []bookings.SeatInfo
 	var result []bookings.SeatInfo
 	for _, seatInfo := range seatsInfo {
 		result = append(result, bookings.SeatInfo{
@@ -430,7 +388,6 @@ func (s *SeatServiceAdapter) GetHoldDetails(ctx context.Context, holdID string) 
 		return nil, err
 	}
 
-	// Convert seats.SeatHoldDetails to bookings.SeatHoldDetails
 	return &bookings.SeatHoldDetails{
 		HoldID:  details.HoldID,
 		UserID:  details.UserID,
@@ -440,7 +397,6 @@ func (s *SeatServiceAdapter) GetHoldDetails(ctx context.Context, holdID string) 
 	}, nil
 }
 
-// WaitlistServiceAdapter adapts waitlist.Service to bookings.WaitlistService interface
 type WaitlistServiceAdapterForBookings struct {
 	waitlistService waitlist.Service
 }
@@ -463,13 +419,11 @@ func (w *WaitlistServiceAdapterForBookings) MarkAsConverted(ctx context.Context,
 	return w.waitlistService.MarkAsConverted(ctx, userID, eventID, bookingID)
 }
 
-// setupAnalyticsRoutes configures analytics routes
 func (r *Router) setupAnalyticsRoutes(rg *gin.RouterGroup) {
-	// Initialize analytics dependencies
+
 	analyticsRepo := analytics.NewRepository(r.db.GetPostgreSQL())
 	analyticsService := analytics.NewService(analyticsRepo)
 
-	// Inject cache service dependency
 	if analyticsService, ok := analyticsService.(interface{ SetCacheService(cache.Service) }); ok && r.cacheService != nil {
 		analyticsService.SetCacheService(r.cacheService)
 	}
@@ -479,37 +433,28 @@ func (r *Router) setupAnalyticsRoutes(rg *gin.RouterGroup) {
 	// Store analytics service for dependency injection
 	r.analyticsService = analyticsService
 
-	// Setup analytics routes
 	analytics.SetupAnalyticsRoutes(rg, analyticsController)
 }
 
-// setupWaitlistRoutes configures waitlist routes
 func (r *Router) setupWaitlistRoutes(rg *gin.RouterGroup) {
 	// Initialize waitlist dependencies
 	waitlistRepo := waitlist.NewRepository(r.db.GetPostgreSQL(), r.db.GetRedis())
 
-	// Create unified notification service and adapter
 	unifiedNotificationService, err := notifications.NewUnifiedNotificationService(nil)
 	if err != nil {
-		// For now, we'll continue without notifications in case of error
-		// In production, you might want to fail here
 		log.Printf("⚠️ Failed to initialize notification service for waitlist: %v", err)
 	}
 
-	// Create adapter that implements waitlist.NotificationService interface
 	var notificationAdapter waitlist.NotificationService
 	if unifiedNotificationService != nil {
 		notificationAdapter = notifications.NewWaitlistServiceAdapter(unifiedNotificationService)
 	} else {
-		// Use a null adapter for development if unified service fails
-		notificationAdapter = &nullNotificationAdapter{}
+		log.Printf("⚠️ Failed to initialize unified notification service for waitlist")
 	}
 
-	// Create user service adapter for fetching user details
 	authRepo := auth.NewRepository(r.db.GetPostgreSQL())
 	userServiceAdapter := auth.NewUserServiceAdapter(authRepo)
 
-	// Create waitlist service with notification service adapter and user service
 	waitlistService := waitlist.NewService(waitlistRepo, notificationAdapter, userServiceAdapter, nil)
 	waitlistController := waitlist.NewController(waitlistService)
 
@@ -539,8 +484,6 @@ func (r *Router) setupWaitlistRoutes(rg *gin.RouterGroup) {
 	waitlist.SetupWaitlistRoutes(rg, waitlistController)
 }
 
-// setupCancellationRoutesWithWrappers sets up cancellation routes using wrapper functions
-// that delegate to the current controller instance, allowing for dynamic service updates
 func (r *Router) setupCancellationRoutesWithWrappers(rg *gin.RouterGroup) {
 	// Event cancellation policy routes (Admin only)
 	events := rg.Group("/admin/events")
@@ -638,7 +581,6 @@ func (r *Router) setupSwaggerRoutes(engine *gin.Engine) {
 	log.Println("   http://localhost:8080/swagger-debug (debug info)")
 }
 
-// findSwaggerFile tries to locate swagger.yaml in various possible locations
 func (r *Router) findSwaggerFile() string {
 	possiblePaths := []string{
 		"./docs/swagger.yaml",     // If running from backend/
@@ -677,7 +619,6 @@ func (r *Router) findSwaggerFile() string {
 	return ""
 }
 
-// fileExists checks if a file exists
 func (r *Router) fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil

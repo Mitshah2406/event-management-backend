@@ -52,7 +52,8 @@ WORKDIR /app
 
 # Copy binary from builder stage
 COPY --from=builder --chown=appuser:appgroup /app/bin/server ./server
-
+# Copy swagger documentation from builder stage
+COPY --from=builder --chown=appuser:appgroup /app/docs/swagger.yaml ./docs/swagger.yaml
 # Copy any necessary config files (if any)
 # COPY --from=builder --chown=appuser:appgroup /app/configs ./configs
 
