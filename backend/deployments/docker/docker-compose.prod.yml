@@ -4,14 +4,14 @@ services:
   # Main Application
   app:
     build:
-      context: ../../
-      dockerfile: ./deployments/docker/Dockerfile.prod
+      context: ../../../
+      dockerfile: ./backend/deployments/docker/Dockerfile.prod
     container_name: evently_app
     restart: unless-stopped
     ports:
       - "9000:8080"
     env_file:
-      - .env  # Let Docker Compose handle the .env file
+      - ../../../backend/.env  # Let Docker Compose handle the .env file
     environment:
       # Server Configuration
       - PORT=8080
@@ -75,7 +75,7 @@ services:
     volumes:
       - app_uploads:/app/uploads
       - app_logs:/app/logs
-      - .env:/app/.env:ro
+      - ../../../backend/.env:/app/.env:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT}/health"]
       interval: 30s
