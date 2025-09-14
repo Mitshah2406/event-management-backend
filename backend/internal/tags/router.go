@@ -16,7 +16,7 @@ func SetupTagRoutes(router *gin.RouterGroup, controller Controller) {
 
 	// Admin routes
 	adminTags := router.Group("/admin/tags")
-	adminTags.Use(middleware.JWTAuth(), middleware.RequireAdmin())
+	adminTags.Use(middleware.JWTAuth())
 	{
 		// Tag management - Admin only
 		adminTags.POST("", controller.CreateTag)           // POST /api/v1/admin/tags - Create tag

@@ -209,14 +209,14 @@ func (s *SMTPEmailService) generateContent(notification *EmailNotification) (str
 
 	switch notification.Type {
 	case NotificationTypeWaitlistSpotAvailable:
-		expiresAtStr, ok := data["expires_at"].(string)
-		if !ok {
-			return "", "", fmt.Errorf("expires_at is not a string")
-		}
-		formattedDate, err := time.Parse("2006-01-02T15:04:05.999999-07:00", expiresAtStr)
-		if err != nil {
-			return "", "", fmt.Errorf("failed to parse expires_at: %w", err)
-		}
+		// expiresAtStr, ok := data["expires_at"].(string)
+		// if !ok {
+		// 	return "", "", fmt.Errorf("expires_at is not a string")
+		// }
+		// formattedDate, err := time.Parse("2006-01-02T15:04:05.999999-07:00", expiresAtStr)
+		// if err != nil {
+		// 	return "", "", fmt.Errorf("failed to parse expires_at: %w", err)
+		// }
 
 		htmlBody := fmt.Sprintf(`
 			<h2>🎉 Great News! A spot is available</h2>
@@ -228,7 +228,7 @@ func (s *SMTPEmailService) generateContent(notification *EmailNotification) (str
 		`,
 			notification.RecipientName,
 			data["event_title"],
-			formattedDate,
+			data["expires_at"],
 			data["position"],
 		)
 
@@ -236,7 +236,7 @@ func (s *SMTPEmailService) generateContent(notification *EmailNotification) (str
 			"Hi %s,\n\nA spot has become available for %s.\nYou have until %v to secure your booking.\nYour position in the waitlist queue was #%v.\n\nBest regards,\nEvently Team",
 			notification.RecipientName,
 			data["event_title"],
-			formattedDate,
+			data["expires_at"],
 			data["position"],
 		)
 
